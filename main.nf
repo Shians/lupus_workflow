@@ -116,15 +116,15 @@ workflow {
 
     // Barcode detection - process each FASTQ individually
     flexiplex_candidate_bc = flexiplexGetBarcodeCandidates(untagged_fastq_files)
-        .map{ sample, bc_file -> bc_file }
-        .collect()
 
-    // Merge candidate barcodes with canonical list
-    flexiplex_bc = mergeFlexiplexBarcodes(flexiplex_candidate_bc, canonical_bc_list)
+    // Merge candidate barcodes with canonical list for each sample
+    flexiplex_bc = flexiplex_candidate_bc
+        .combine(canonical_bc_list)
+        | mergeFlexiplexBarcodes
 
     // Tag FASTQ files with detected barcodes
     tagged_fastq_files = untagged_fastq_files
-        .combine(flexiplex_bc)
+        .join(flexiplex_bc)
         | flexiplexTagFastq
 
     // Split FASTQ into chunks for parallel alignment
