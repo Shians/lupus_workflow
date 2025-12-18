@@ -1,0 +1,5 @@
+sample_id	bam_dir
+Sample1_FC001	/data/flowcell_FC001/sample1/
+Sample1_FC002	/data/flowcell_FC002/sample1/
+Sample2_FC001	/data/flowcell_FC001/sample2/
+Sample2_FC002	/data/flowcell_FC002/sample2/

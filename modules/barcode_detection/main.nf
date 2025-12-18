@@ -68,6 +68,10 @@ process mergeFlexiplexBarcodes {
 }
 
 process flexiplexTagFastq {
+    publishDir "${params.output_dir}/flexiplex/barcoded_fastq/",
+        mode: 'copy',
+        pattern: '*.fastq.gz',
+        enabled: params.publish.barcoded_fastq
     publishDir "logs/flexiplex",
         mode: 'copy',
         pattern: "*.log",

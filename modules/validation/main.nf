@@ -21,8 +21,8 @@ def validateFileParam(errors, paramValue, paramName, displayName) {
 def validateParams() {
     def errors = []
 
-    // Validate file inputs using helper function
-    validateFileParam(errors, params.input_bam, "params.input_bam", "Input BAM file")
+    // Validate required file inputs
+    validateFileParam(errors, params.sample_sheet, "params.sample_sheet", "Sample sheet file")
     validateFileParam(errors, params.reference_genome, "params.reference_genome", "Reference genome file")
     validateFileParam(errors, params.reference_transcriptome, "params.reference_transcriptome", "Reference transcriptome file")
     validateFileParam(errors, params.canonical_barcode_list, "params.canonical_barcode_list", "Canonical barcode list file")
@@ -62,6 +62,7 @@ def validateParams() {
     // Print validation success message
     log.info "✓ Parameter validation successful"
     log.info "  - Output directory: ${params.output_dir}"
+    log.info "  - Sample sheet: ${params.sample_sheet}"
     log.info "  - Reference genome: ${params.reference_genome}"
     log.info "  - Reference transcriptome: ${params.reference_transcriptome}"
     log.info "  - Canonical barcode list: ${params.canonical_barcode_list}"

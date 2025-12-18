@@ -1,7 +1,8 @@
 // Import modules
 include { validateParams } from './modules/validation/main.nf'
+include { createChannelFromSampleSheet } from './modules/sample_sheet/main.nf'
 include { buildMinimapIndexGenome; buildMinimapIndexTranscriptome } from './modules/indexing/main.nf'
-include { bamToFastq; splitFastqChunks; retagFastq } from './modules/preprocessing/main.nf'
+include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
 include { flexiplexGetBarcodeCandidates; mergeFlexiplexBarcodes; flexiplexTagFastq } from './modules/barcode_detection/main.nf'
 include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './modules/alignment/main.nf'
 include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByName } from './modules/postprocessing/main.nf'
@@ -19,13 +20,33 @@ def helpMessage() {
       nextflow run main.nf [options]
 
     Required Parameters:
-      --input_bam PATH                 Path to input BAM file
+      --sample_sheet PATH              Path to sample sheet TSV file
       --reference_genome PATH          Path to reference genome FASTA file
       --reference_transcriptome PATH   Path to reference transcriptome FASTA file
       --canonical_barcode_list PATH    Path to canonical barcode list file
 
     Optional Parameters:
       --output_dir PATH                Output directory (default: output)
+
+    Sample Sheet Format:
+      The sample sheet must be a tab-separated (TSV) file with the following columns:
+        - sample_id: Unique identifier for each sample (can include flowcell ID)
+        - bam_dir: Directory containing BAM files for this sample
+
+      The workflow will:
+        1. Find all *.bam files in each directory
+        2. Process each BAM file in parallel (BAM → FASTQ → alignment)
+        3. Aggregate results by sample_id after alignment
+
+      Example (columns separated by tabs):
+        sample_id\tbam_dir
+        Sample1_FC001\t/data/flowcell_FC001/sample1/
+        Sample1_FC002\t/data/flowcell_FC002/sample1/
+        Sample2_FC001\t/data/flowcell_FC001/sample2/
+        Sample2_FC002\t/data/flowcell_FC002/sample2/
+
+      This allows maximum parallelization: each BAM file is processed as a separate
+      task, ideal for single-cell ONT data with hundreds of BAMs per flowcell.
 
     Alignment Options:
       --alignment.bam_parts INT        Number of BAM parts for processing (default: 32)
@@ -35,7 +56,7 @@ def helpMessage() {
 
       Intermediate Files:
         --publish.fastq BOOL                   Save BAM to FASTQ converted files (default: false)
-        --publish.retagged_fastq BOOL          Save retagged FASTQ files (default: true)
+        --publish.barcoded_fastq BOOL          Save barcoded FASTQ files (default: true)
         --publish.flexiplex_candidates BOOL    Save individual barcode candidates (default: false)
         --publish.flexiplex_merged BOOL        Save merged barcode list (default: true)
         --publish.flexiplex_logs BOOL          Save Flexiplex log files (default: true)
@@ -59,6 +80,7 @@ def helpMessage() {
 
     Example:
       nextflow run main.nf \\
+        --sample_sheet samples.tsv \\
         --reference_genome /path/to/genome.fa \\
         --reference_transcriptome /path/to/transcriptome.fa \\
         --canonical_barcode_list /path/to/barcodes.txt \\
@@ -83,39 +105,49 @@ workflow {
     ref_genome_index = buildMinimapIndexGenome(ref_genome_path)
     transcriptome_index = buildMinimapIndexTranscriptome(transcriptome_path)
 
-    untagged_fastq_files = channel.from("Untreated1")
-        .combine(channel.fromPath("data/fastq/*.fastq.gz"))
+    // Create FASTQ files from input BAM files
+    // Each BAM file is processed individually for parallelization
+    // Parse TSV and expand directories to individual BAM files
+    // Channel contains: [sample_id, bam_file] for each BAM file
+    bam_channel = createChannelFromSampleSheet(params.sample_sheet)
 
+    // Convert each BAM to FASTQ in parallel
+    untagged_fastq_files = bamToFastq(bam_channel)
+
+    // Barcode detection - process each FASTQ individually
     flexiplex_candidate_bc = flexiplexGetBarcodeCandidates(untagged_fastq_files)
         .map{ sample, bc_file -> bc_file }
         .collect()
 
+    // Merge candidate barcodes with canonical list
     flexiplex_bc = mergeFlexiplexBarcodes(flexiplex_candidate_bc, canonical_bc_list)
 
+    // Tag FASTQ files with detected barcodes
     tagged_fastq_files = untagged_fastq_files
         .combine(flexiplex_bc)
         | flexiplexTagFastq
 
+    // Split FASTQ into chunks for parallel alignment
     fastq_chunks = tagged_fastq_files.fastq
-        .map { sample, fastq -> tuple(sample, fastq, 10) }
+        .map { sample, fastq -> tuple(sample, fastq, params.alignment.bam_parts) }
         | splitFastqChunks
         | transpose
 
-    retagged_fastq = retagFastq(fastq_chunks)
-
-    merged_spliced_bams = retagged_fastq.combine(ref_genome_index)
+    // Genome alignment
+    merged_spliced_bams = fastq_chunks.combine(ref_genome_index)
         | alignMinimap2Spliced
         | groupTuple
         | mergeSpliceAlignedBams
 
     // Transcript quantification
-    // retagged_fastq.combine(transcriptome_index)
-    //     | alignMinimap2TranscriptomeUnsorted
-    //     | groupTuple
-    //     | catTranscriptAlignedBams
-    //     | sortBamByName
-    //     | runOarfish
+    fastq_chunks.combine(transcriptome_index)
+        | alignMinimap2TranscriptomeUnsorted
+        | groupTuple
+        | catTranscriptAlignedBams
+        | sortBamByName
+        | runOarfish
 
+    // TODO: Enable demultiplexing once SNP annotation is configured
     // runCellSNPGenotype(cellsnp_input) |
     //     runVireoDemultiplex
 }
