@@ -18,6 +18,20 @@ def validateFileParam(errors, paramValue, paramName, displayName) {
     }
 }
 
+// Helper function to validate an optional file parameter
+def validateOptionalFileParam(errors, paramValue, paramName, displayName) {
+    if (paramValue && !paramValue.trim().isEmpty()) {
+        def fileObj = file(paramValue)
+        if (!fileObj.exists()) {
+            errors << "ERROR: ${displayName} does not exist: ${paramValue}"
+        } else if (fileObj.isEmpty()) {
+            errors << "ERROR: ${displayName} is empty: ${paramValue}"
+        } else if (!fileObj.isFile()) {
+            errors << "ERROR: ${displayName} path is not a file: ${paramValue}"
+        }
+    }
+}
+
 def validateParams() {
     def errors = []
 
@@ -26,6 +40,10 @@ def validateParams() {
     validateFileParam(errors, params.reference_genome, "params.reference_genome", "Reference genome file")
     validateFileParam(errors, params.reference_transcriptome, "params.reference_transcriptome", "Reference transcriptome file")
     validateFileParam(errors, params.canonical_barcode_list, "params.canonical_barcode_list", "Canonical barcode list file")
+
+    // Validate optional file inputs
+    validateOptionalFileParam(errors, params.vireo_sample_sheet, "params.vireo_sample_sheet", "Vireo sample sheet file")
+    validateOptionalFileParam(errors, params.snp_annotation, "params.snp_annotation", "SNP annotation VCF file")
 
     // Validate alignment parameters
     if (!params.alignment) {

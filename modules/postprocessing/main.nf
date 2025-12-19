@@ -31,10 +31,11 @@ process mergeSpliceAlignedBams {
     tuple val(sample_id), path(bam_files, stageAs: "*.bam")
 
     output:
-    tuple val(sample_id), path(merged_bam)
+    tuple val(sample_id), path(merged_bam), path(merged_bam_index)
 
     script:
     merged_bam = "${sample_id}.bam"
+    merged_bam_index = "${merged_bam}.bai"
     """
     samtools merge -@ ${task.cpus} -o ${merged_bam} ${bam_files}
     samtools index ${merged_bam}

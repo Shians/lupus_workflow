@@ -1,5 +1,92 @@
 // Sample sheet parsing and validation functions
 
+// Parse Vireo sample sheet TSV file
+// Expected columns: sample_id, n_donors
+def parseVireoSampleSheet(vireoSheetPath) {
+    def vireoSheet = [:]
+    def lineNumber = 0
+    def errors = []
+
+    file(vireoSheetPath).withReader { reader ->
+        def header = null
+        reader.eachLine { line ->
+            lineNumber += 1
+
+            // Skip empty lines
+            if (line.trim().isEmpty()) {
+                return
+            }
+
+            // Parse header
+            if (header == null) {
+                header = line.split('\t').collect { it.trim() }
+
+                // Validate required columns
+                def requiredCols = ['sample_id', 'n_donors']
+                def missingCols = requiredCols.findAll { !header.contains(it) }
+                if (missingCols) {
+                    errors << "ERROR: Vireo sample sheet missing required columns: ${missingCols.join(', ')}"
+                    errors << "       Found columns: ${header.join(', ')}"
+                    return
+                }
+                return
+            }
+
+            // Parse data rows
+            def values = line.split('\t').collect { it.trim() }
+            if (values.size() != header.size()) {
+                errors << "ERROR: Line ${lineNumber} has ${values.size()} columns but header has ${header.size()} columns"
+                return
+            }
+
+            def row = [header, values].transpose().collectEntries()
+
+            // Validate sample_id
+            if (!row.sample_id || row.sample_id.isEmpty()) {
+                errors << "ERROR: Line ${lineNumber}: sample_id cannot be empty"
+            }
+
+            // Validate n_donors
+            if (!row.n_donors || row.n_donors.isEmpty()) {
+                errors << "ERROR: Line ${lineNumber}: n_donors cannot be empty"
+            } else {
+                try {
+                    def nDonors = row.n_donors.toInteger()
+                    if (nDonors <= 0) {
+                        errors << "ERROR: Line ${lineNumber}: n_donors must be positive, got: ${nDonors}"
+                    } else if (nDonors > 20) {
+                        errors << "WARNING: Line ${lineNumber}: n_donors is very high (${nDonors}), this may cause performance issues"
+                    }
+                    vireoSheet[row.sample_id] = nDonors
+                } catch (NumberFormatException e) {
+                    errors << "ERROR: Line ${lineNumber}: n_donors must be an integer, got: ${row.n_donors}"
+                }
+            }
+        }
+    }
+
+    if (errors.size() > 0) {
+        log.error "Vireo sample sheet validation failed with ${errors.size()} error(s):"
+        errors.each { error ->
+            log.error "  ${error}"
+        }
+        System.exit(1)
+    }
+
+    if (vireoSheet.size() == 0) {
+        log.error "ERROR: Vireo sample sheet contains no data rows"
+        System.exit(1)
+    }
+
+    log.info "Vireo sample sheet loaded successfully:"
+    log.info "  - Total samples: ${vireoSheet.size()}"
+    vireoSheet.each { sample, nDonors ->
+        log.info "    ${sample}: ${nDonors} donors"
+    }
+
+    return vireoSheet
+}
+
 // Parse sample sheet TSV file
 // Expected columns: sample_id, bam_dir
 // This will expand each bam_dir to find all .bam files

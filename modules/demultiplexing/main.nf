@@ -40,7 +40,7 @@ process runVireoDemultiplex {
     time '24h'
 
     input:
-    tuple path(cellsnp_path), val(suffix)
+    tuple path(cellsnp_path), val(suffix), val(n_donors)
 
     output:
     path output_path
@@ -52,7 +52,7 @@ process runVireoDemultiplex {
     vireo \
         -c ${cellsnp_path} \
         -o ${output_path} \
-        -N 2 \
+        -N ${n_donors} \
         -t GT \
         -p ${task.cpus}
     """

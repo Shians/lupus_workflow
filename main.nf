@@ -1,6 +1,6 @@
 // Import modules
 include { validateParams } from './modules/validation/main.nf'
-include { createChannelFromSampleSheet } from './modules/sample_sheet/main.nf'
+include { createChannelFromSampleSheet; parseVireoSampleSheet } from './modules/sample_sheet/main.nf'
 include { buildMinimapIndexGenome; buildMinimapIndexTranscriptome } from './modules/indexing/main.nf'
 include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
 include { flexiplexGetBarcodeCandidates; mergeFlexiplexBarcodes; flexiplexTagFastq } from './modules/barcode_detection/main.nf'
@@ -27,6 +27,8 @@ def helpMessage() {
 
     Optional Parameters:
       --output_dir PATH                Output directory (default: output)
+      --snp_annotation PATH            Path to VCF file with SNP positions for CellSNP genotyping
+      --vireo_sample_sheet PATH        Path to Vireo sample sheet TSV file specifying donor counts per sample
 
     Sample Sheet Format:
       The sample sheet must be a tab-separated (TSV) file with the following columns:
@@ -47,6 +49,24 @@ def helpMessage() {
 
       This allows maximum parallelization: each BAM file is processed as a separate
       task, ideal for single-cell ONT data with hundreds of BAMs per flowcell.
+
+    Genotyping and Demultiplexing (Optional):
+      CellSNP genotyping runs when --snp_annotation is provided to generate variant call data.
+      Vireo demultiplexing is optional and only runs when both --snp_annotation and
+      --vireo_sample_sheet are provided.
+
+    Vireo Sample Sheet Format (Optional):
+      The Vireo sample sheet is a TSV file with the following columns:
+        - sample_id: Must match sample_id values in the main sample sheet
+        - n_donors: Number of donors expected in each sample (positive integer)
+
+      Example (columns separated by tabs):
+        sample_id\tn_donors
+        Sample1\t3
+        Sample2\t2
+
+      The sample_id should match the base sample identifier without flowcell suffix.
+      If a sample is not listed, it will default to 2 donors.
 
     Alignment Options:
       --alignment.bam_parts INT        Number of BAM parts for processing (default: 32)
@@ -150,7 +170,30 @@ workflow {
         | sortBamByName
         | runOarfish
 
-    // TODO: Enable demultiplexing once SNP annotation is configured
-    // runCellSNPGenotype(cellsnp_input) |
-    //     runVireoDemultiplex
+    // Genotyping and Demultiplexing
+    if (params.snp_annotation) {
+        snp_annotation_path = Channel.fromPath(params.snp_annotation)
+
+        // Prepare input for CellSNP: combine BAMs with their barcode lists
+        cellsnp_input = merged_spliced_bams
+            .join(flexiplex_bc)
+            .map { sample_id, bam, bai, barcode_file ->
+                tuple([bam], [bai], barcode_file, sample_id)
+            }
+            .combine(snp_annotation_path)
+
+        // Run CellSNP genotyping (always runs when snp_annotation is provided)
+        cellsnp_results = runCellSNPGenotype(cellsnp_input)
+
+        // Conditionally run Vireo demultiplexing
+        if (params.vireo_sample_sheet) {
+            vireo_donors = parseVireoSampleSheet(params.vireo_sample_sheet)
+
+            cellsnp_results
+                .map { cellsnp_path, sample_id ->
+                    tuple(cellsnp_path, sample_id, vireo_donors[sample_id] ?: 2)
+                }
+                | runVireoDemultiplex
+        }
+    }
 }
