@@ -51,6 +51,9 @@ def helpMessage() {
     Alignment Options:
       --alignment.bam_parts INT        Number of BAM parts for processing (default: 32)
 
+    Barcode Detection Options:
+      --barcode_detection.min_barcode_count INT   Minimum read count for a barcode to be included (default: 500)
+
     Publishing Options:
       Control which intermediate and final results are saved:
 

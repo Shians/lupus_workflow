@@ -22,7 +22,7 @@ process flexiplexGetBarcodeCandidates {
 }
 
 process mergeFlexiplexBarcodes {
-    publishDir "${params.output_dir}/flexiplex/merged/",
+    publishDir "${params.output_dir}/flexiplex_merged_barcodes/",
         mode: 'copy',
         enabled: params.publish.flexiplex_merged
     tag "${sample_id}"
@@ -48,7 +48,7 @@ process mergeFlexiplexBarcodes {
 
     data %>%
         filter(barcode %in% bc_list) %>%
-        filter(count > 500) %>%
+        filter(count > ${params.barcode_detection.min_barcode_count}) %>%
         select(barcode) %>%
         write_tsv('${merged_bc_file}', col_names = FALSE)
 
@@ -56,7 +56,7 @@ process mergeFlexiplexBarcodes {
 }
 
 process flexiplexTagFastq {
-    publishDir "${params.output_dir}/flexiplex/barcoded_fastq/",
+    publishDir "${params.output_dir}/flexiplex_barcoded_fastq/",
         mode: 'copy',
         pattern: '*.fastq.gz',
         enabled: params.publish.barcoded_fastq
