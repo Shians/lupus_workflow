@@ -121,9 +121,9 @@ workflow {
 
     // Validate input parameters before starting the workflow
     validateParams()
-    ref_genome_path = Channel.fromPath(params.reference_genome)
-    transcriptome_path = Channel.fromPath(params.reference_transcriptome)
-    canonical_bc_list = Channel.fromPath(params.canonical_barcode_list)
+    ref_genome_path = channel.fromPath(params.reference_genome)
+    transcriptome_path = channel.fromPath(params.reference_transcriptome)
+    canonical_bc_list = channel.fromPath(params.canonical_barcode_list)
 
     ref_genome_index = buildMinimapIndexGenome(ref_genome_path)
     transcriptome_index = buildMinimapIndexTranscriptome(transcriptome_path)
@@ -172,7 +172,7 @@ workflow {
 
     // Genotyping and Demultiplexing
     if (params.snp_annotation) {
-        snp_annotation_path = Channel.fromPath(params.snp_annotation)
+        snp_annotation_path = channel.fromPath(params.snp_annotation)
 
         // Prepare input for CellSNP: combine BAMs with their barcode lists
         cellsnp_input = merged_spliced_bams

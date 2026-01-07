@@ -19,11 +19,11 @@ def parseVireoSampleSheet(vireoSheetPath) {
 
             // Parse header
             if (header == null) {
-                header = line.split('\t').collect { it.trim() }
+                header = line.split('\t').collect { it -> it.trim() }
 
                 // Validate required columns
                 def requiredCols = ['sample_id', 'n_donors']
-                def missingCols = requiredCols.findAll { !header.contains(it) }
+                def missingCols = requiredCols.findAll { it -> !header.contains(it) }
                 if (missingCols) {
                     errors << "ERROR: Vireo sample sheet missing required columns: ${missingCols.join(', ')}"
                     errors << "       Found columns: ${header.join(', ')}"
@@ -33,7 +33,7 @@ def parseVireoSampleSheet(vireoSheetPath) {
             }
 
             // Parse data rows
-            def values = line.split('\t').collect { it.trim() }
+            def values = line.split('\t').collect { it -> it.trim() }
             if (values.size() != header.size()) {
                 errors << "ERROR: Line ${lineNumber} has ${values.size()} columns but header has ${header.size()} columns"
                 return
@@ -58,7 +58,7 @@ def parseVireoSampleSheet(vireoSheetPath) {
                         errors << "WARNING: Line ${lineNumber}: n_donors is very high (${nDonors}), this may cause performance issues"
                     }
                     vireoSheet[row.sample_id] = nDonors
-                } catch (NumberFormatException e) {
+                } catch (NumberFormatException _e) {
                     errors << "ERROR: Line ${lineNumber}: n_donors must be an integer, got: ${row.n_donors}"
                 }
             }
@@ -107,11 +107,11 @@ def parseSampleSheet(sampleSheetPath) {
 
             // Parse header
             if (header == null) {
-                header = line.split('\t').collect { it.trim() }
+                header = line.split('\t').collect { it -> it.trim() }
 
                 // Validate required columns
                 def requiredCols = ['sample_id', 'bam_dir']
-                def missingCols = requiredCols.findAll { !header.contains(it) }
+                def missingCols = requiredCols.findAll { it -> !header.contains(it) }
                 if (missingCols) {
                     errors << "ERROR: Sample sheet missing required columns: ${missingCols.join(', ')}"
                     errors << "       Found columns: ${header.join(', ')}"
@@ -121,7 +121,7 @@ def parseSampleSheet(sampleSheetPath) {
             }
 
             // Parse data rows
-            def values = line.split('\t').collect { it.trim() }
+            def values = line.split('\t').collect { it -> it.trim() }
             if (values.size() != header.size()) {
                 errors << "ERROR: Line ${lineNumber} has ${values.size()} columns but header has ${header.size()} columns"
                 return
@@ -145,7 +145,7 @@ def parseSampleSheet(sampleSheetPath) {
                     errors << "ERROR: Line ${lineNumber}: BAM path is not a directory: ${row.bam_dir}"
                 } else {
                     // Find all .bam files in the directory
-                    def bamFiles = bamDir.listFiles().findAll { it.name.endsWith('.bam') }
+                    def bamFiles = bamDir.listFiles().findAll { it -> it.name.endsWith('.bam') }
                     if (bamFiles.isEmpty()) {
                         errors << "ERROR: Line ${lineNumber}: No BAM files found in directory: ${row.bam_dir}"
                     }
@@ -182,15 +182,15 @@ def createChannelFromSampleSheet(sampleSheetPath) {
     def bamFilesList = []
     sampleSheet.each { row ->
         def bamDir = file(row.bam_dir)
-        def bamFiles = bamDir.listFiles().findAll { it.name.endsWith('.bam') }
+        def bamFiles = bamDir.listFiles().findAll { it -> it.name.endsWith('.bam') }
         bamFiles.each { bamFile ->
             bamFilesList << [sample_id: row.sample_id, bam_file: bamFile]
         }
     }
 
     // Log summary statistics
-    def uniqueSamples = bamFilesList.collect { it.sample_id }.unique()
-    def bamsBySample = bamFilesList.groupBy { it.sample_id }.collectEntries { k, v -> [k, v.size()] }
+    def uniqueSamples = bamFilesList.collect { it -> it.sample_id }.unique()
+    def bamsBySample = bamFilesList.groupBy { it -> it.sample_id }.collectEntries { k, v -> [k, v.size()] }
 
     log.info "Sample sheet loaded successfully:"
     log.info "  - Total BAM files: ${bamFilesList.size()}"
@@ -200,7 +200,7 @@ def createChannelFromSampleSheet(sampleSheetPath) {
         log.info "    ${sample}: ${count} BAM files"
     }
 
-    return Channel.fromList(
+    return channel.fromList(
         bamFilesList.collect { row ->
             tuple(row.sample_id, file(row.bam_file))
         }
