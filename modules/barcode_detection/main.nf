@@ -16,8 +16,39 @@ process flexiplexGetBarcodeCandidates {
 
     script:
     output_barcodes = "${sample_id}_barcodes_counts.txt"
+
+    // Set barcode and UMI lengths based on chemistry
+    def chemistry = params.barcode_detection.chemistry
+    def barcode_pattern = ""
+    def umi_pattern = ""
+    def suffix_pattern = ""
+
+    if (chemistry == '3v1') {
+        barcode_pattern = "??????????????"     // 14 bp
+        umi_pattern = "??????????"             // 10 bp
+        suffix_pattern = "TTTCTTATATGGG"
+    } else if (chemistry == '3v2') {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "??????????"             // 10 bp
+        suffix_pattern = "TTTCTTATATGGG"
+    } else if (chemistry in ['3v3', '3v3.1', '3v4']) {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "????????????"           // 12 bp
+        suffix_pattern = "TTTCTTATATGGG"
+    } else if (chemistry in ['5v1', '5v2']) {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "??????????"             // 10 bp
+        suffix_pattern = "TTTCTTATAT"
+    } else if (chemistry == '5v3') {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "????????????"           // 12 bp
+        suffix_pattern = "TTTCTTATAT"
+    } else {
+        error "Unsupported chemistry version: ${chemistry}. Supported versions: 3v1, 3v2, 3v3, 3v3.1, 3v4, 5v1, 5v2, 5v3"
+    }
+
     """
-    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "CTACACGACGCTCTTCCGATCT" -b "????????????????" -u "????????????" -x "TTTCTTATATGGG" -f 0 -n ${sample_id}
+    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "CTACACGACGCTCTTCCGATCT" -b "${barcode_pattern}" -u "${umi_pattern}" -x "${suffix_pattern}" -f 0 -n ${sample_id}
     """
 }
 
@@ -85,8 +116,39 @@ process flexiplexTagFastq {
     script:
     output_fastq = "${sample_id}_tagged.fastq.gz"
     output_log = "${sample_id}_flexiplex.log"
+
+    // Set barcode and UMI lengths based on chemistry
+    def chemistry = params.barcode_detection.chemistry
+    def barcode_pattern = ""
+    def umi_pattern = ""
+    def suffix_pattern = ""
+
+    if (chemistry == '3v1') {
+        barcode_pattern = "??????????????"     // 14 bp
+        umi_pattern = "??????????"             // 10 bp
+        suffix_pattern = "TTTCTTATATGGG"
+    } else if (chemistry == '3v2') {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "??????????"             // 10 bp
+        suffix_pattern = "TTTCTTATATGGG"
+    } else if (chemistry in ['3v3', '3v3.1', '3v4']) {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "????????????"           // 12 bp
+        suffix_pattern = "TTTCTTATATGGG"
+    } else if (chemistry in ['5v1', '5v2']) {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "??????????"             // 10 bp
+        suffix_pattern = "TTTCTTATAT"
+    } else if (chemistry == '5v3') {
+        barcode_pattern = "????????????????"   // 16 bp
+        umi_pattern = "????????????"           // 12 bp
+        suffix_pattern = "TTTCTTATAT"
+    } else {
+        error "Unsupported chemistry version: ${chemistry}. Supported versions: 3v1, 3v2, 3v3, 3v3.1, 3v4, 5v1, 5v2, 5v3"
+    }
+
     """
-    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "CTACACGACGCTCTTCCGATCT" -b "????????????????" -u "????????????" -x "TTTCTTATATGGG" -f 2 -e 1 -n ${sample_id} -k ${barcode_file} | pigz > ${output_fastq}
+    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "CTACACGACGCTCTTCCGATCT" -b "${barcode_pattern}" -u "${umi_pattern}" -x "${suffix_pattern}" -f 2 -e 1 -n ${sample_id} -k ${barcode_file} | pigz > ${output_fastq}
     grep -vE '^INFO:|^WARNING:|million reads processed|cite us' .command.log > ${output_log}
     """
 }
