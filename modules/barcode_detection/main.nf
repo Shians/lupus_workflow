@@ -31,7 +31,7 @@ process mergeFlexiplexBarcodes {
     time '2h'
 
     input:
-    tuple val(sample_id), path(barcode_file), path(canonical_bc_list)
+    tuple val(sample_id), path(barcode_files, stageAs: '*_barcodes_counts.txt'), path(canonical_bc_list)
 
     output:
     tuple val(sample_id), path(merged_bc_file)
@@ -44,14 +44,20 @@ process mergeFlexiplexBarcodes {
     library(tidyverse)
 
     bc_list <- read_lines("${canonical_bc_list}")
-    data <- read_tsv("${barcode_file}", col_names = c("barcode", "count"))
+
+    # Read all barcode count files and combine them
+    barcode_files <- list.files(pattern = "*_barcodes_counts.txt")
+
+    data <- map(barcode_files, ~read_tsv(.x, col_names = c("barcode", "count"), show_col_types = FALSE)) %>%
+        bind_rows() %>%
+        summarize(count = sum(count), .by = barcode) %>%
+        arrange(desc(count))
 
     data %>%
         filter(barcode %in% bc_list) %>%
         filter(count > ${params.barcode_detection.min_barcode_count}) %>%
         select(barcode) %>%
         write_tsv('${merged_bc_file}', col_names = FALSE)
-
     """
 }
 

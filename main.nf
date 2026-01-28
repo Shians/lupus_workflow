@@ -141,7 +141,9 @@ workflow {
     flexiplex_candidate_bc = flexiplexGetBarcodeCandidates(untagged_fastq_files)
 
     // Merge candidate barcodes with canonical list for each sample
+    // Group all barcode count files by sample_id before merging
     flexiplex_bc = flexiplex_candidate_bc
+        .groupTuple()
         .combine(canonical_bc_list)
         | mergeFlexiplexBarcodes
 
