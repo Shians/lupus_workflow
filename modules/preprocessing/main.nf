@@ -2,7 +2,7 @@ process bamToFastq {
     publishDir "${params.output_dir}/fastq/",
         mode: 'copy',
         pattern: '*.fastq.gz',
-        enabled: params.publish.fastq
+        enabled: params.publish_fastq
     tag "${sample_id}-${bam_file.simpleName}"
     cpus 4
     memory '16.GB'

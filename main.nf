@@ -49,7 +49,7 @@ workflow {
 
     // Split FASTQ into chunks for parallel alignment
     fastq_chunks = tagged_fastq_files.fastq
-        .map { sample, fastq -> tuple(sample, fastq, params.alignment.bam_parts) }
+        .map { sample, fastq -> tuple(sample, fastq, params.bam_parts) }
         | splitFastqChunks
         | transpose
 

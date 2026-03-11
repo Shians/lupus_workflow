@@ -1,7 +1,7 @@
 process runCellSNPGenotype {
     publishDir "${params.output_dir}/cell_snp/",
         mode: 'copy',
-        enabled: params.publish.cell_snp
+        enabled: params.publish_cell_snp
     tag "CellSNP-genotype ${suffix}"
     cpus 32
     memory '16.GB'
@@ -33,7 +33,7 @@ process runCellSNPGenotype {
 process runVireoDemultiplex {
     publishDir "${params.output_dir}/vireo/",
         mode: 'copy',
-        enabled: params.publish.vireo
+        enabled: params.publish_vireo
     tag "Vireo-demultiplex ${suffix}"
     cpus 8
     memory '256.GB'

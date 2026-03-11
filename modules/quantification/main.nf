@@ -1,7 +1,7 @@
 process runOarfish {
     publishDir "${params.output_dir}/oarfish/",
         mode: "copy",
-        enabled: params.publish.oarfish
+        enabled: params.publish_oarfish
     tag "$sample"
     cpus 8
     memory {16.GB * task.attempt}

@@ -8,7 +8,6 @@
         "input_options": {
             "title": "Input Options",
             "type": "object",
-            "description": "Input sample sheet, reference files, and barcode list",
             "fa_icon": "fas fa-arrow-right",
             "properties": {
                 "sample_sheet": {
@@ -53,7 +52,6 @@
         "output_options": {
             "title": "Output Options",
             "type": "object",
-            "description": "Output directory",
             "fa_icon": "fas fa-folder-open",
             "properties": {
                 "output_dir": {
@@ -67,120 +65,102 @@
         "alignment_options": {
             "title": "Alignment Options",
             "type": "object",
-            "description": "Parameters controlling alignment behaviour",
             "fa_icon": "fas fa-align-left",
             "properties": {
-                "alignment": {
-                    "type": "object",
-                    "properties": {
-                        "bam_parts": {
-                            "type": "integer",
-                            "default": 32,
-                            "minimum": 1,
-                            "description": "Number of chunks to split each FASTQ into for parallel alignment.",
-                            "fa_icon": "fas fa-puzzle-piece"
-                        }
-                    }
+                "bam_parts": {
+                    "type": "integer",
+                    "default": 32,
+                    "minimum": 1,
+                    "description": "Number of chunks to split each FASTQ into for parallel alignment.",
+                    "fa_icon": "fas fa-puzzle-piece"
                 }
             }
         },
         "barcode_detection_options": {
             "title": "Barcode Detection Options",
             "type": "object",
-            "description": "Parameters controlling 10X barcode detection",
             "fa_icon": "fas fa-barcode",
             "properties": {
-                "barcode_detection": {
-                    "type": "object",
-                    "properties": {
-                        "min_barcode_count": {
-                            "type": "integer",
-                            "default": 500,
-                            "minimum": 1,
-                            "description": "Minimum read count for a barcode to be retained.",
-                            "fa_icon": "fas fa-filter"
-                        },
-                        "chemistry": {
-                            "type": "string",
-                            "default": "3v3",
-                            "description": "10X Chromium chemistry version.",
-                            "fa_icon": "fas fa-flask",
-                            "enum": ["3v1", "3v2", "3v3", "3v3.1", "3v4", "5v1", "5v2", "5v3"]
-                        }
-                    }
+                "min_barcode_count": {
+                    "type": "integer",
+                    "default": 500,
+                    "minimum": 1,
+                    "description": "Minimum read count for a barcode to be retained.",
+                    "fa_icon": "fas fa-filter"
+                },
+                "chemistry": {
+                    "type": "string",
+                    "default": "3v3",
+                    "description": "10X Chromium chemistry version.",
+                    "fa_icon": "fas fa-flask",
+                    "enum": ["3v1", "3v2", "3v3", "3v3.1", "3v4", "5v1", "5v2", "5v3"]
                 }
             }
         },
         "publish_options": {
             "title": "Publishing Options",
             "type": "object",
-            "description": "Control which intermediate and final results are saved to the output directory",
             "fa_icon": "fas fa-save",
             "properties": {
-                "publish": {
-                    "type": "object",
-                    "properties": {
-                        "fastq": {
-                            "type": "boolean",
-                            "default": false,
-                            "description": "Save BAM to FASTQ converted files.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "retagged_fastq": {
-                            "type": "boolean",
-                            "default": true,
-                            "description": "Save retagged FASTQ files with barcode and UMI tags.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "flexiplex_candidates": {
-                            "type": "boolean",
-                            "default": false,
-                            "description": "Save individual barcode candidate files per sample.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "flexiplex_merged": {
-                            "type": "boolean",
-                            "default": true,
-                            "description": "Save merged barcode list across all samples.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "flexiplex_logs": {
-                            "type": "boolean",
-                            "default": true,
-                            "description": "Save Flexiplex tagging log files.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "splice_aligned": {
-                            "type": "boolean",
-                            "default": true,
-                            "description": "Save splice-aligned BAM files.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "oarfish": {
-                            "type": "boolean",
-                            "default": true,
-                            "description": "Save Oarfish quantification results.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "cell_snp": {
-                            "type": "boolean",
-                            "default": true,
-                            "description": "Save CellSNP genotyping results.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "vireo": {
-                            "type": "boolean",
-                            "default": true,
-                            "description": "Save Vireo demultiplexing results.",
-                            "fa_icon": "fas fa-save"
-                        },
-                        "bcl2fastq": {
-                            "type": "boolean",
-                            "default": false,
-                            "description": "Save BCL to FASTQ conversion results.",
-                            "fa_icon": "fas fa-save"
-                        }
-                    }
+                "publish_fastq": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Save BAM to FASTQ converted files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_retagged_fastq": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save retagged FASTQ files with barcode and UMI tags.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_flexiplex_candidates": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Save individual barcode candidate files per sample.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_flexiplex_merged": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save merged barcode list across all samples.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_flexiplex_logs": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save Flexiplex tagging log files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_splice_aligned": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save splice-aligned BAM files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_oarfish": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save Oarfish quantification results.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_cell_snp": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save CellSNP genotyping results.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_vireo": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save Vireo demultiplexing results.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_bcl2fastq": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Save BCL to FASTQ conversion results.",
+                    "fa_icon": "fas fa-save"
                 }
             }
         }

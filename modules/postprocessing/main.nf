@@ -21,7 +21,7 @@ process mergeSpliceAlignedBams {
     publishDir "${params.output_dir}/splice_aligned/",
         mode: 'copy',
         pattern: '*.{bam,bai}',
-        enabled: params.publish.splice_aligned
+        enabled: params.publish_splice_aligned
     tag "$sample_id"
     cpus 8
     memory 32.GB

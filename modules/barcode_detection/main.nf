@@ -2,7 +2,7 @@ process flexiplexGetBarcodeCandidates {
     publishDir "${params.output_dir}/flexiplex/",
         mode: 'copy',
         pattern: '*.txt',
-        enabled: params.publish.flexiplex_candidates
+        enabled: params.publish_flexiplex_candidates
     tag "${sample_id}"
     cpus 8
     memory 16.GB
@@ -18,7 +18,7 @@ process flexiplexGetBarcodeCandidates {
     output_barcodes = "${sample_id}_barcodes_counts.txt"
 
     // Set barcode and UMI lengths based on chemistry
-    def chemistry = params.barcode_detection.chemistry
+    def chemistry = params.chemistry
     def barcode_pattern = ""
     def umi_pattern = ""
     def suffix_pattern = ""
@@ -55,7 +55,7 @@ process flexiplexGetBarcodeCandidates {
 process mergeFlexiplexBarcodes {
     publishDir "${params.output_dir}/flexiplex_merged_barcodes/",
         mode: 'copy',
-        enabled: params.publish.flexiplex_merged
+        enabled: params.publish_flexiplex_merged
     tag "${sample_id}"
     cpus 4
     memory 8.GB
@@ -86,7 +86,7 @@ process mergeFlexiplexBarcodes {
 
     data %>%
         filter(barcode %in% bc_list) %>%
-        filter(count > ${params.barcode_detection.min_barcode_count}) %>%
+        filter(count > ${params.min_barcode_count}) %>%
         select(barcode) %>%
         write_tsv('${merged_bc_file}', col_names = FALSE)
     """
@@ -96,11 +96,11 @@ process flexiplexTagFastq {
     publishDir "${params.output_dir}/flexiplex_barcoded_fastq/",
         mode: 'copy',
         pattern: '*.fastq.gz',
-        enabled: params.publish.barcoded_fastq
+        enabled: params.publish_retagged_fastq
     publishDir "logs/flexiplex",
         mode: 'copy',
         pattern: "*.log",
-        enabled: params.publish.flexiplex_logs
+        enabled: params.publish_flexiplex_logs
     tag "${sample_id}"
     cpus 8
     memory 32.GB
@@ -118,7 +118,7 @@ process flexiplexTagFastq {
     output_log = "${sample_id}_flexiplex.log"
 
     // Set barcode and UMI lengths based on chemistry
-    def chemistry = params.barcode_detection.chemistry
+    def chemistry = params.chemistry
     def barcode_pattern = ""
     def umi_pattern = ""
     def suffix_pattern = ""
