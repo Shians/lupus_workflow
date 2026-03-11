@@ -155,12 +155,6 @@
                     "default": true,
                     "description": "Save Vireo demultiplexing results.",
                     "fa_icon": "fas fa-save"
-                },
-                "publish_bcl2fastq": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Save BCL to FASTQ conversion results.",
-                    "fa_icon": "fas fa-save"
                 }
             }
         }

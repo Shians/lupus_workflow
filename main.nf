@@ -9,7 +9,6 @@ include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './mod
 include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByName } from './modules/postprocessing/main.nf'
 include { runCellSNPGenotype; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
 include { runOarfish } from './modules/quantification/main.nf'
-include { runBcl2Fastq } from './modules/utilities/main.nf'
 
 workflow {
     // Validate parameters against schema and print summary
