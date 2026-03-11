@@ -1,5 +1,6 @@
+include { validateParameters; paramsSummaryLog } from 'plugin/nf-schema'
+
 // Import modules
-include { validateParams } from './modules/validation/main.nf'
 include { createChannelFromSampleSheet; parseVireoSampleSheet } from './modules/sample_sheet/main.nf'
 include { buildMinimapIndexGenome; buildMinimapIndexTranscriptome } from './modules/indexing/main.nf'
 include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
@@ -10,117 +11,11 @@ include { runCellSNPGenotype; runVireoDemultiplex } from './modules/demultiplexi
 include { runOarfish } from './modules/quantification/main.nf'
 include { runBcl2Fastq } from './modules/utilities/main.nf'
 
-def helpMessage() {
-    log.info """
-    ===================================
-    Lupus Workflow - Single Cell Analysis Pipeline
-    ===================================
-
-    Usage:
-      nextflow run main.nf [options]
-
-    Required Parameters:
-      --sample_sheet PATH              Path to sample sheet TSV file
-      --reference_genome PATH          Path to reference genome FASTA file
-      --reference_transcriptome PATH   Path to reference transcriptome FASTA file
-      --canonical_barcode_list PATH    Path to canonical barcode list file
-
-    Optional Parameters:
-      --output_dir PATH                Output directory (default: output)
-      --snp_annotation PATH            Path to VCF file with SNP positions for CellSNP genotyping
-      --vireo_sample_sheet PATH        Path to Vireo sample sheet TSV file specifying donor counts per sample
-
-    Sample Sheet Format:
-      The sample sheet must be a tab-separated (TSV) file with the following columns:
-        - sample_id: Unique identifier for each sample (can include flowcell ID)
-        - bam_dir: Directory containing BAM files for this sample
-
-      The workflow will:
-        1. Find all *.bam files in each directory
-        2. Process each BAM file in parallel (BAM → FASTQ → alignment)
-        3. Aggregate results by sample_id after alignment
-
-      Example (columns separated by tabs):
-        sample_id\tbam_dir
-        Sample1_FC001\t/data/flowcell_FC001/sample1/
-        Sample1_FC002\t/data/flowcell_FC002/sample1/
-        Sample2_FC001\t/data/flowcell_FC001/sample2/
-        Sample2_FC002\t/data/flowcell_FC002/sample2/
-
-      This allows maximum parallelization: each BAM file is processed as a separate
-      task, ideal for single-cell ONT data with hundreds of BAMs per flowcell.
-
-    Genotyping and Demultiplexing (Optional):
-      CellSNP genotyping runs when --snp_annotation is provided to generate variant call data.
-      Vireo demultiplexing is optional and only runs when both --snp_annotation and
-      --vireo_sample_sheet are provided.
-
-    Vireo Sample Sheet Format (Optional):
-      The Vireo sample sheet is a TSV file with the following columns:
-        - sample_id: Must match sample_id values in the main sample sheet
-        - n_donors: Number of donors expected in each sample (positive integer)
-
-      Example (columns separated by tabs):
-        sample_id\tn_donors
-        Sample1\t3
-        Sample2\t2
-
-      The sample_id should match the base sample identifier without flowcell suffix.
-      If a sample is not listed, it will default to 2 donors.
-
-    Alignment Options:
-      --alignment.bam_parts INT        Number of BAM parts for processing (default: 32)
-
-    Barcode Detection Options:
-      --barcode_detection.min_barcode_count INT   Minimum read count for a barcode to be included (default: 500)
-
-    Publishing Options:
-      Control which intermediate and final results are saved:
-
-      Intermediate Files:
-        --publish.fastq BOOL                   Save BAM to FASTQ converted files (default: false)
-        --publish.barcoded_fastq BOOL          Save barcoded FASTQ files (default: true)
-        --publish.flexiplex_candidates BOOL    Save individual barcode candidates (default: false)
-        --publish.flexiplex_merged BOOL        Save merged barcode list (default: true)
-        --publish.flexiplex_logs BOOL          Save Flexiplex log files (default: true)
-        --publish.splice_aligned BOOL          Save splice-aligned BAM files (default: true)
-
-      Final Results:
-        --publish.oarfish BOOL                 Save Oarfish quantification results (default: true)
-        --publish.cell_snp BOOL                Save CellSNP genotyping results (default: true)
-        --publish.vireo BOOL                   Save Vireo demultiplexing results (default: true)
-
-      Utility Outputs:
-        --publish.bcl2fastq BOOL               Save BCL to FASTQ conversion results (default: false)
-
-    Execution Profiles:
-      -profile conda                   Use Conda for dependency management
-      -profile docker                  Use Docker for containerization
-      -profile singularity             Use Singularity for containerization
-
-    Other Options:
-      --help                           Display this help message
-
-    Example:
-      nextflow run main.nf \\
-        --sample_sheet samples.tsv \\
-        --reference_genome /path/to/genome.fa \\
-        --reference_transcriptome /path/to/transcriptome.fa \\
-        --canonical_barcode_list /path/to/barcodes.txt \\
-        --output_dir results \\
-        -profile conda
-    """
-}
-
 workflow {
-    // Show help message if requested
-    if (params.help) {
-        helpMessage()
-        exit 0
-    }
+    // Validate parameters against schema and print summary
+    validateParameters()
+    log.info paramsSummaryLog(workflow)
 
-    // Validate input parameters before starting the workflow
-    validateParams()
     ref_genome_path = channel.fromPath(params.reference_genome)
     transcriptome_path = channel.fromPath(params.reference_transcriptome)
     canonical_bc_list = channel.fromPath(params.canonical_barcode_list)

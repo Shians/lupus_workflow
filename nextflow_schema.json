@@ -1,0 +1,195 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/shians/lupus-workflow/main/nextflow_schema.json",
+    "title": "Lupus Workflow Parameters",
+    "description": "Single-cell RNA-seq analysis pipeline for Oxford Nanopore data",
+    "type": "object",
+    "defs": {
+        "input_options": {
+            "title": "Input Options",
+            "type": "object",
+            "description": "Input sample sheet, reference files, and barcode list",
+            "fa_icon": "fas fa-arrow-right",
+            "properties": {
+                "sample_sheet": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to TSV file with sample_id and bam_dir columns listing BAM directories per sample.",
+                    "fa_icon": "fas fa-table"
+                },
+                "reference_genome": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to reference genome FASTA file for splice alignment.",
+                    "fa_icon": "fas fa-dna"
+                },
+                "reference_transcriptome": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to reference transcriptome FASTA file for transcript quantification.",
+                    "fa_icon": "fas fa-dna"
+                },
+                "canonical_barcode_list": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to canonical barcode list file for 10X barcode correction.",
+                    "fa_icon": "fas fa-barcode"
+                },
+                "snp_annotation": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to VCF file with SNP positions for CellSNP genotyping. Enables genotyping when provided.",
+                    "fa_icon": "fas fa-map-marker-alt"
+                },
+                "vireo_sample_sheet": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to Vireo sample sheet TSV with sample_id and n_donors columns. Enables donor demultiplexing when provided alongside --snp_annotation.",
+                    "fa_icon": "fas fa-users"
+                }
+            },
+            "required": ["sample_sheet", "reference_genome", "reference_transcriptome", "canonical_barcode_list"]
+        },
+        "output_options": {
+            "title": "Output Options",
+            "type": "object",
+            "description": "Output directory",
+            "fa_icon": "fas fa-folder-open",
+            "properties": {
+                "output_dir": {
+                    "type": "string",
+                    "default": "output",
+                    "description": "Directory for pipeline output files.",
+                    "fa_icon": "fas fa-folder-open"
+                }
+            }
+        },
+        "alignment_options": {
+            "title": "Alignment Options",
+            "type": "object",
+            "description": "Parameters controlling alignment behaviour",
+            "fa_icon": "fas fa-align-left",
+            "properties": {
+                "alignment": {
+                    "type": "object",
+                    "properties": {
+                        "bam_parts": {
+                            "type": "integer",
+                            "default": 32,
+                            "minimum": 1,
+                            "description": "Number of chunks to split each FASTQ into for parallel alignment.",
+                            "fa_icon": "fas fa-puzzle-piece"
+                        }
+                    }
+                }
+            }
+        },
+        "barcode_detection_options": {
+            "title": "Barcode Detection Options",
+            "type": "object",
+            "description": "Parameters controlling 10X barcode detection",
+            "fa_icon": "fas fa-barcode",
+            "properties": {
+                "barcode_detection": {
+                    "type": "object",
+                    "properties": {
+                        "min_barcode_count": {
+                            "type": "integer",
+                            "default": 500,
+                            "minimum": 1,
+                            "description": "Minimum read count for a barcode to be retained.",
+                            "fa_icon": "fas fa-filter"
+                        },
+                        "chemistry": {
+                            "type": "string",
+                            "default": "3v3",
+                            "description": "10X Chromium chemistry version.",
+                            "fa_icon": "fas fa-flask",
+                            "enum": ["3v1", "3v2", "3v3", "3v3.1", "3v4", "5v1", "5v2", "5v3"]
+                        }
+                    }
+                }
+            }
+        },
+        "publish_options": {
+            "title": "Publishing Options",
+            "type": "object",
+            "description": "Control which intermediate and final results are saved to the output directory",
+            "fa_icon": "fas fa-save",
+            "properties": {
+                "publish": {
+                    "type": "object",
+                    "properties": {
+                        "fastq": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Save BAM to FASTQ converted files.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "retagged_fastq": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Save retagged FASTQ files with barcode and UMI tags.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "flexiplex_candidates": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Save individual barcode candidate files per sample.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "flexiplex_merged": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Save merged barcode list across all samples.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "flexiplex_logs": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Save Flexiplex tagging log files.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "splice_aligned": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Save splice-aligned BAM files.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "oarfish": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Save Oarfish quantification results.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "cell_snp": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Save CellSNP genotyping results.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "vireo": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Save Vireo demultiplexing results.",
+                            "fa_icon": "fas fa-save"
+                        },
+                        "bcl2fastq": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Save BCL to FASTQ conversion results.",
+                            "fa_icon": "fas fa-save"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "allOf": [
+        { "$ref": "#/defs/input_options" },
+        { "$ref": "#/defs/output_options" },
+        { "$ref": "#/defs/alignment_options" },
+        { "$ref": "#/defs/barcode_detection_options" },
+        { "$ref": "#/defs/publish_options" }
+    ]
+}
