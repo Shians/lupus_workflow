@@ -90,12 +90,12 @@
                 },
                 "chemistry": {
                     "type": "string",
-                    "default": "3v3",
                     "description": "10X Chromium chemistry version.",
                     "fa_icon": "fas fa-flask",
                     "enum": ["3v1", "3v2", "3v3", "3v3.1", "3v4", "5v1", "5v2", "5v3"]
                 }
-            }
+            },
+            "required": ["chemistry"]
         },
         "publish_options": {
             "title": "Publishing Options",
