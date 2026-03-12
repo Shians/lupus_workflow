@@ -1,12 +1,10 @@
 process bamToFastq {
+    label 'small'
     publishDir "${params.output_dir}/fastq/",
         mode: 'copy',
         pattern: '*.fastq.gz',
         enabled: params.publish_fastq
     tag "${sample_id}-${bam_file.simpleName}"
-    cpus 4
-    memory '16.GB'
-    time '12h'
     array 100
 
     input:
@@ -23,9 +21,8 @@ process bamToFastq {
 }
 
 process splitFastqChunks {
+    label 'medium'
     tag "$sample"
-    cpus 8
-    memory "16.GB"
 
     input:
     tuple val(sample), path(fastq), val(alignment_bam_parts)
@@ -47,4 +44,3 @@ process splitFastqChunks {
         $fastq
     """
 }
-

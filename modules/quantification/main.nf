@@ -1,10 +1,9 @@
 process runOarfish {
+    label 'medium'
     publishDir "${params.output_dir}/oarfish/",
         mode: "copy",
         enabled: params.publish_oarfish
     tag "$sample"
-    cpus 8
-    memory {16.GB * task.attempt}
     errorStrategy { task.exitStatus in [137, 139] ? 'retry' : 'finish' }
     maxRetries 3
 

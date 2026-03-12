@@ -1,11 +1,9 @@
 process runCellSNPGenotype {
+    label 'large'
     publishDir "${params.output_dir}/cell_snp/",
         mode: 'copy',
         enabled: params.publish_cell_snp
     tag "CellSNP-genotype ${suffix}"
-    cpus 32
-    memory '16.GB'
-    time '48h'
 
     input:
     tuple path(bam_paths), path(path_indices), path(barcode_path), val(suffix), path(snp_annotation)
@@ -31,13 +29,11 @@ process runCellSNPGenotype {
 }
 
 process runVireoDemultiplex {
+    label 'large'
     publishDir "${params.output_dir}/vireo/",
         mode: 'copy',
         enabled: params.publish_vireo
     tag "Vireo-demultiplex ${suffix}"
-    cpus 8
-    memory '256.GB'
-    time '24h'
 
     input:
     tuple path(cellsnp_path), val(suffix), val(n_donors)

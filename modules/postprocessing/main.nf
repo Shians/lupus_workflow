@@ -1,8 +1,6 @@
 process catTranscriptAlignedBams {
+    label 'medium'
     tag "$sample_id"
-    cpus 8
-    memory 32.GB
-    time '12h'
 
     input:
     tuple val(sample_id), path(bam_files, stageAs: "*.bam")
@@ -18,14 +16,12 @@ process catTranscriptAlignedBams {
 }
 
 process mergeSpliceAlignedBams {
+    label 'medium'
     publishDir "${params.output_dir}/splice_aligned/",
         mode: 'copy',
         pattern: '*.{bam,bai}',
         enabled: params.publish_splice_aligned
     tag "$sample_id"
-    cpus 8
-    memory 32.GB
-    time '12h'
 
     input:
     tuple val(sample_id), path(bam_files, stageAs: "*.bam")
@@ -43,9 +39,7 @@ process mergeSpliceAlignedBams {
 }
 
 process combineMergedSplicedBams {
-    cpus 8
-    memory 32.GB
-    time '12h'
+    label 'medium'
 
     input:
     path(bam_files, stageAs: "*.bam")
@@ -63,9 +57,8 @@ process combineMergedSplicedBams {
 }
 
 process sortBamByName {
+    label 'medium'
     tag "$sample"
-    cpus 8
-    memory "16.GB"
 
     input:
     tuple val(sample), path(input_bam)

@@ -1,12 +1,10 @@
 process flexiplexGetBarcodeCandidates {
+    label 'medium'
     publishDir "${params.output_dir}/flexiplex/",
         mode: 'copy',
         pattern: '*.txt',
         enabled: params.publish_flexiplex_candidates
     tag "${sample_id}"
-    cpus 8
-    memory 16.GB
-    time '4h'
 
     input:
     tuple val(sample_id), path(fastq_file)
@@ -53,13 +51,11 @@ process flexiplexGetBarcodeCandidates {
 }
 
 process mergeFlexiplexBarcodes {
+    label 'small'
     publishDir "${params.output_dir}/flexiplex_merged_barcodes/",
         mode: 'copy',
         enabled: params.publish_flexiplex_merged
     tag "${sample_id}"
-    cpus 4
-    memory 8.GB
-    time '2h'
 
     input:
     tuple val(sample_id), path(barcode_files, stageAs: '*_barcodes_counts.txt'), path(canonical_bc_list)
@@ -93,6 +89,7 @@ process mergeFlexiplexBarcodes {
 }
 
 process flexiplexTagFastq {
+    label 'large'
     publishDir "${params.output_dir}/flexiplex_barcoded_fastq/",
         mode: 'copy',
         pattern: '*.fastq.gz',
@@ -102,9 +99,6 @@ process flexiplexTagFastq {
         pattern: "*.log",
         enabled: params.publish_flexiplex_logs
     tag "${sample_id}"
-    cpus 8
-    memory 32.GB
-    time '48h'
 
     input:
     tuple val(sample_id), path(fastq_file), path(barcode_file)

@@ -1,7 +1,5 @@
 process buildMinimapIndexGenome {
-    cpus 8
-    memory 64.GB
-    time '12h'
+    label 'medium'
 
     input:
     path(ref_genome)
@@ -17,9 +15,7 @@ process buildMinimapIndexGenome {
 }
 
 process buildMinimapIndexTranscriptome {
-    cpus 8
-    memory 64.GB
-    time '12h'
+    label 'medium'
 
     input:
     path(ref)

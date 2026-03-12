@@ -1,8 +1,6 @@
 process alignMinimap2Spliced {
+    label 'large'
     tag "$sample"
-    cpus 24
-    memory 32.GB
-    time '48h'
     array 1000
 
     input:
@@ -23,10 +21,8 @@ process alignMinimap2Spliced {
 }
 
 process alignMinimap2TranscriptomeUnsorted {
+    label 'large'
     tag "$sample"
-    cpus 24
-    memory 32.GB
-    time '48h'
     array 1000
 
     input:
