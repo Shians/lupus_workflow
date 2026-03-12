@@ -46,7 +46,8 @@ process flexiplexGetBarcodeCandidates {
     }
 
     """
-    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "CTACACGACGCTCTTCCGATCT" -b "${barcode_pattern}" -u "${umi_pattern}" -x "${suffix_pattern}" -f 0 -n ${sample_id}
+    # full left-pattern is CTACACGACGCTCTTCCGATCT, but we can allow for some mismatches in the first 20 bp to capture more reads
+    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "GACGCTCTTCCGATCT" -b "${barcode_pattern}" -u "${umi_pattern}" -x "${suffix_pattern}" -f 0 -n ${sample_id}
     """
 }
 
