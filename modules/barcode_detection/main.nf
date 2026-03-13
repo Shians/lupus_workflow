@@ -1,3 +1,19 @@
+def getChemistryPatterns(chemistry) {
+    if (chemistry == '3v1') {
+        return [prefix: "GACGCTCTTCCGATCT", barcode: "??????????????", umi: "??????????", suffix: "TTTTTTTT"]
+    } else if (chemistry == '3v2') {
+        return [prefix: "GACGCTCTTCCGATCT", barcode: "????????????????", umi: "??????????", suffix: "TTTTTTTT"]
+    } else if (['3v3', '3v3.1', '3v4'].contains(chemistry)) {
+        return [prefix: "GACGCTCTTCCGATCT", barcode: "????????????????", umi: "????????????", suffix: "TTTTTTTT"]
+    } else if (['5v1', '5v2'].contains(chemistry)) {
+        return [prefix: "GACGCTCTTCCGATCT", barcode: "????????????????", umi: "??????????", suffix: "TTTCTTATAT"]
+    } else if (chemistry == '5v3') {
+        return [prefix: "GACGCTCTTCCGATCT", barcode: "????????????????", umi: "????????????", suffix: "TTTCTTATAT"]
+    } else {
+        error "Unsupported chemistry version: ${chemistry}. Supported versions: 3v1, 3v2, 3v3, 3v3.1, 3v4, 5v1, 5v2, 5v3"
+    }
+}
+
 process flexiplexGetBarcodeCandidates {
     label 'medium'
     publishDir "${params.output_dir}/flexiplex/",
@@ -15,39 +31,19 @@ process flexiplexGetBarcodeCandidates {
     script:
     output_barcodes = "${sample_id}_barcodes_counts.txt"
 
-    // Set barcode and UMI lengths based on chemistry
-    def chemistry = params.chemistry
-    def barcode_pattern = ""
-    def umi_pattern = ""
-    def suffix_pattern = ""
-
-    if (chemistry == '3v1') {
-        barcode_pattern = "??????????????"     // 14 bp
-        umi_pattern = "??????????"             // 10 bp
-        suffix_pattern = "TTTTTTTT"
-    } else if (chemistry == '3v2') {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "??????????"             // 10 bp
-        suffix_pattern = "TTTTTTTT"
-    } else if (chemistry in ['3v3', '3v3.1', '3v4']) {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "????????????"           // 12 bp
-        suffix_pattern = "TTTTTTTT"
-    } else if (chemistry in ['5v1', '5v2']) {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "??????????"             // 10 bp
-        suffix_pattern = "TTTCTTATAT"
-    } else if (chemistry == '5v3') {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "????????????"           // 12 bp
-        suffix_pattern = "TTTCTTATAT"
-    } else {
-        error "Unsupported chemistry version: ${chemistry}. Supported versions: 3v1, 3v2, 3v3, 3v3.1, 3v4, 5v1, 5v2, 5v3"
-    }
+    def chemistryPatterns = getChemistryPatterns(params.chemistry)
 
     """
     # full left-pattern is CTACACGACGCTCTTCCGATCT, but we can allow for some mismatches in the first 20 bp to capture more reads
-    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "GACGCTCTTCCGATCT" -b "${barcode_pattern}" -u "${umi_pattern}" -x "${suffix_pattern}" -f 0 -n ${sample_id}
+    gunzip -c ${fastq_file} \\
+        | flexiplex \\
+            -p ${task.cpus} \\
+            -x "${chemistryPatterns.prefix}" \\
+            -b "${chemistryPatterns.barcode}" \\
+            -u "${chemistryPatterns.umi}" \\
+            -x "${chemistryPatterns.suffix}" \\
+            -f 0 \\
+            -n ${sample_id}
     """
 }
 
@@ -112,38 +108,21 @@ process flexiplexTagFastq {
     output_fastq = "${sample_id}_tagged.fastq.gz"
     output_log = "${sample_id}_flexiplex.log"
 
-    // Set barcode and UMI lengths based on chemistry
-    def chemistry = params.chemistry
-    def barcode_pattern = ""
-    def umi_pattern = ""
-    def suffix_pattern = ""
-
-    if (chemistry == '3v1') {
-        barcode_pattern = "??????????????"     // 14 bp
-        umi_pattern = "??????????"             // 10 bp
-        suffix_pattern = "TTTTTTTT"
-    } else if (chemistry == '3v2') {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "??????????"             // 10 bp
-        suffix_pattern = "TTTTTTTT"
-    } else if (chemistry in ['3v3', '3v3.1', '3v4']) {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "????????????"           // 12 bp
-        suffix_pattern = "TTTTTTTT"
-    } else if (chemistry in ['5v1', '5v2']) {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "??????????"             // 10 bp
-        suffix_pattern = "TTTCTTATAT"
-    } else if (chemistry == '5v3') {
-        barcode_pattern = "????????????????"   // 16 bp
-        umi_pattern = "????????????"           // 12 bp
-        suffix_pattern = "TTTCTTATAT"
-    } else {
-        error "Unsupported chemistry version: ${chemistry}. Supported versions: 3v1, 3v2, 3v3, 3v3.1, 3v4, 5v1, 5v2, 5v3"
-    }
+    def chemistryPatterns = getChemistryPatterns(params.chemistry)
 
     """
-    gunzip -c ${fastq_file} | flexiplex -p ${task.cpus} -x "GACGCTCTTCCGATCT" -b "${barcode_pattern}" -u "${umi_pattern}" -x "${suffix_pattern}" -f 2 -e 1 -n ${sample_id} -k ${barcode_file} | pigz > ${output_fastq}
+    gunzip -c ${fastq_file} \\
+        | flexiplex \\
+            -p ${task.cpus} \\
+            -x "${chemistryPatterns.prefix}" \\
+            -b "${chemistryPatterns.barcode}" \\
+            -u "${chemistryPatterns.umi}" \\
+            -x "${chemistryPatterns.suffix}" \\
+            -f 2 \\
+            -e 1 \\
+            -n ${sample_id} \\
+            -k ${barcode_file} \\
+        | pigz > ${output_fastq}
     grep -vE '^INFO:|^WARNING:|million reads processed|cite us' .command.log > ${output_log}
     """
 }
