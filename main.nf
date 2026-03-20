@@ -43,7 +43,7 @@ workflow {
 
     // Tag FASTQ files with detected barcodes
     tagged_fastq_files = untagged_fastq_files
-        .join(flexiplex_bc)
+        .combine(flexiplex_bc, by: 0)
         | flexiplexTagFastq
 
     // Split FASTQ into chunks for parallel alignment
