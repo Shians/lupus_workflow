@@ -91,7 +91,7 @@ process flexiplexTagFastq {
         mode: 'copy',
         pattern: '*.fastq.gz',
         enabled: params.publish_retagged_fastq
-    publishDir "logs/flexiplex",
+    publishDir "${params.output_dir}/logs/flexiplex",
         mode: 'copy',
         pattern: "*.log",
         enabled: params.publish_flexiplex_logs
