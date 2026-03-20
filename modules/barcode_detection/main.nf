@@ -105,8 +105,8 @@ process flexiplexTagFastq {
     path(output_log), emit: 'log'
 
     script:
-    output_fastq = "${sample_id}_tagged.fastq.gz"
-    output_log = "${sample_id}_flexiplex.log"
+    output_fastq = "${sample_id}_${fastq_file.simpleName}_tagged.fastq.gz"
+    output_log = "${sample_id}_${fastq_file.simpleName}_flexiplex.log"
 
     def chemistryPatterns = getChemistryPatterns(params.chemistry)
 
