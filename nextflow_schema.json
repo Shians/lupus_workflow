@@ -138,6 +138,12 @@
                     "description": "Save splice-aligned BAM files.",
                     "fa_icon": "fas fa-save"
                 },
+                "publish_bam_dedup": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Save UMI-deduplicated BAM files.",
+                    "fa_icon": "fas fa-save"
+                },
                 "publish_oarfish": {
                     "type": "boolean",
                     "default": true,

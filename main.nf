@@ -7,6 +7,8 @@ include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
 include { flexiplexGetBarcodeCandidates; mergeFlexiplexBarcodes; flexiplexTagFastq } from './modules/barcode_detection/main.nf'
 include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './modules/alignment/main.nf'
 include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByName } from './modules/postprocessing/main.nf'
+include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/main.nf'
+include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
 include { runCellSNPGenotype; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
 include { runOarfish } from './modules/quantification/main.nf'
 
@@ -58,11 +60,15 @@ workflow {
         | groupTuple
         | mergeSpliceAlignedBams
 
+    // UMI deduplication
+    dedup_bams = umitoolsDedupGenome(merged_spliced_bams)
+
     // Transcript quantification
     fastq_chunks.combine(transcriptome_index)
         | alignMinimap2TranscriptomeUnsorted
         | groupTuple
         | catTranscriptAlignedBams
+        | umitoolsDedupTranscriptome
         | sortBamByName
         | runOarfish
 
@@ -71,7 +77,7 @@ workflow {
         snp_annotation_path = channel.fromPath(params.snp_annotation)
 
         // Prepare input for CellSNP: combine BAMs with their barcode lists
-        cellsnp_input = merged_spliced_bams
+        cellsnp_input = dedup_bams
             .join(flexiplex_bc)
             .map { sample_id, bam, bai, barcode_file ->
                 tuple([bam], [bai], barcode_file, sample_id)
