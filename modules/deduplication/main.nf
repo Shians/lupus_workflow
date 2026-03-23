@@ -3,18 +3,17 @@ process umitoolsDedup {
     tag "$sample_id"
     publishDir "${params.output_dir}/bam_dedup/",
         mode: 'copy',
-        pattern: '*.{bam,bai}',
+        pattern: '*.bam',
         enabled: params.publish_bam_dedup ?: false
 
     input:
-    tuple val(sample_id), path(input_bam), path(input_bai)
+    tuple val(sample_id), path(input_bam)
 
     output:
-    tuple val(sample_id), path(dedup_bam), path(dedup_bai), emit: bam
+    tuple val(sample_id), path(dedup_bam), emit: bam
 
     script:
     dedup_bam = "${sample_id}_dedup.bam"
-    dedup_bai = "${dedup_bam}.bai"
     """
     umi_tools dedup \\
         --per-contig \\
@@ -24,6 +23,5 @@ process umitoolsDedup {
         --umi-tag=UB \\
         -I ${input_bam} \\
         -S ${dedup_bam}
-    samtools index ${dedup_bam}
     """
 }
