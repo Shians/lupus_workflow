@@ -16,6 +16,7 @@ process umitoolsDedup {
     dedup_bam = "${sample_id}_dedup.bam"
     """
     umi_tools dedup \\
+        --per-gene \\
         --per-contig \\
         --per-cell \\
         --cell-tag=CB \\
