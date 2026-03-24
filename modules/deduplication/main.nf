@@ -15,6 +15,7 @@ process umitoolsDedup {
     script:
     dedup_bam = "${sample_id}_dedup.bam"
     """
+    samtools index ${input_bam}
     umi_tools dedup \\
         --per-gene \\
         --per-contig \\
