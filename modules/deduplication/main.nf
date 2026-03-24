@@ -1,3 +1,22 @@
+process sortIndexBam {
+    label 'medium'
+    tag "$sample_id"
+
+    input:
+    tuple val(sample_id), path(input_bam)
+
+    output:
+    tuple val(sample_id), path(sorted_bam), path(sorted_bai)
+
+    script:
+    sorted_bam = "${sample_id}_coord_sorted.bam"
+    sorted_bai = "${sorted_bam}.bai"
+    """
+    samtools sort -@ ${task.cpus} -o ${sorted_bam} ${input_bam}
+    samtools index ${sorted_bam}
+    """
+}
+
 process umitoolsDedup {
     label 'medium'
     tag "$sample_id"
@@ -7,7 +26,7 @@ process umitoolsDedup {
         enabled: params.publish_bam_dedup ?: false
 
     input:
-    tuple val(sample_id), path(input_bam)
+    tuple val(sample_id), path(input_bam), path(input_bai)
 
     output:
     tuple val(sample_id), path(dedup_bam), emit: bam
@@ -15,7 +34,6 @@ process umitoolsDedup {
     script:
     dedup_bam = "${sample_id}_dedup.bam"
     """
-    samtools index ${input_bam}
     umi_tools dedup \\
         --per-gene \\
         --per-contig \\
