@@ -12,6 +12,10 @@ include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/m
 include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
 include { runCellSNPGenotype; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
 include { runOarfish } from './modules/quantification/main.nf'
+include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; multiQC } from './modules/qc/main.nf'
+include { countReads as countRawReads } from './modules/qc/main.nf'
+include { countReads as countGenomeAlignedReads } from './modules/qc/main.nf'
+include { countReads as countGenomeDedupReads } from './modules/qc/main.nf'
 
 workflow {
     // Validate parameters against schema and print summary
@@ -31,6 +35,10 @@ workflow {
     // Channel contains: [sample_id, bam_file] for each BAM file
     bam_channel = createChannelFromSampleSheet(params.sample_sheet)
 
+    // QC: Cramino stats and raw read counts run in parallel with BAM conversion
+    cramino_out = craminoStats(bam_channel)
+    raw_counts_ch = countRawReads(bam_channel.map { sample_id, bam -> tuple(sample_id, bam, 'input_bam', 'ALL') })
+
     // Convert each BAM to FASTQ in parallel
     untagged_fastq_files = bamToFastq(bam_channel)
 
@@ -39,10 +47,11 @@ workflow {
 
     // Merge candidate barcodes with canonical list for each sample
     // Group all barcode count files by sample_id before merging
-    flexiplex_bc = flexiplex_candidate_bc
+    merged_bc_result = flexiplex_candidate_bc
         .groupTuple()
         .combine(canonical_bc_list)
         | mergeFlexiplexBarcodes
+    flexiplex_bc = merged_bc_result.barcodes
 
     // Tag FASTQ files with detected barcodes
     tagged_fastq_files = untagged_fastq_files
@@ -61,25 +70,48 @@ workflow {
         | groupTuple
         | mergeSpliceAlignedBams
 
+    // QC: genome alignment stats and read count
+    flagstat_out = samtoolsFlagstat(merged_spliced_bams)
+    mosdepth_out = mosdepthCoverage(merged_spliced_bams)
+    genome_counts_ch = countGenomeAlignedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_genome_alignment', 'PRIMARY_MAPPED') })
+
     // UMI deduplication
-    dedup_bams = umitoolsDedupGenome(merged_spliced_bams)
+    dedup_bam_genome = umitoolsDedupGenome(merged_spliced_bams)
+    dedup_genome_counts_ch = countGenomeDedupReads(dedup_bam_genome.bam.map { sample_id, bam -> tuple(sample_id, bam, 'after_genome_dedup', 'PRIMARY_MAPPED') })
 
     // Transcript quantification
-    fastq_chunks.combine(transcriptome_index)
+    dedup_bam_transcriptome = fastq_chunks.combine(transcriptome_index)
         | alignMinimap2TranscriptomeUnsorted
         | groupTuple
         | catTranscriptAlignedBams
         | sortIndexBam
         | umitoolsDedupTranscriptome
+
+    dedup_bam_transcriptome.bam
         | sortBamByName
         | runOarfish
+
+    // Read tracking summary
+    all_counts_ch = raw_counts_ch
+        .mix(genome_counts_ch)
+        .mix(dedup_genome_counts_ch)
+        .groupTuple()
+    readCountSummary(all_counts_ch)
+
+    // MultiQC: collect cramino, flagstat, and mosdepth outputs
+    qc_inputs = cramino_out.map { _id, json -> json }
+        .mix(flagstat_out.map { _id, txt -> txt })
+        .mix(mosdepth_out.map { _id, summary, dist -> [summary, dist] })
+        .flatten()
+        .collect()
+    multiQC(qc_inputs)
 
     // Genotyping and Demultiplexing
     if (params.snp_annotation) {
         snp_annotation_path = channel.fromPath(params.snp_annotation)
 
         // Prepare input for CellSNP: combine BAMs with their barcode lists
-        cellsnp_input = dedup_bams
+        cellsnp_input = dedup_bam_genome.bam
             .join(flexiplex_bc)
             .map { sample_id, bam, bai, barcode_file ->
                 tuple([bam], [bai], barcode_file, sample_id)

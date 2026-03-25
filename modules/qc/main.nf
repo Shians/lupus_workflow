@@ -64,15 +64,20 @@ process countReads {
     tag "${sample_id} (${stage})"
 
     input:
-    tuple val(sample_id), path(bam), val(stage)
+    tuple val(sample_id), path(bam), val(stage), val(count_mode)
 
     output:
     tuple val(sample_id), path(count_file)
 
     script:
     count_file = "${sample_id}_${stage}_count.txt"
+    def mode_flags = [
+        ALL            : '',
+        PRIMARY_MAPPED : '-F 0x904'
+    ]
+    def flags = mode_flags[count_mode]
     """
-    count=\$(samtools view -c ${bam})
+    count=\$(samtools view -c ${flags} ${bam})
     echo -e "${sample_id}\t${stage}\t\$count" > ${count_file}
     """
 }
