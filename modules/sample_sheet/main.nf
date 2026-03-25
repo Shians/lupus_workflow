@@ -66,15 +66,17 @@ def parseVireoSampleSheet(vireoSheetPath) {
     }
 
     if (errors.size() > 0) {
-        log.error "Vireo sample sheet validation failed with ${errors.size()} error(s):"
-        errors.each { error ->
-            log.error "  ${error}"
-        }
+        def msg = "Vireo sample sheet validation failed with ${errors.size()} error(s):\n" +
+                  errors.collect { e -> "  ${e}" }.join('\n')
+        log.error msg
+        System.err.println "ERROR: ${msg}"
         System.exit(1)
     }
 
     if (vireoSheet.size() == 0) {
-        log.error "ERROR: Vireo sample sheet contains no data rows"
+        def msg = "Vireo sample sheet contains no data rows"
+        log.error msg
+        System.err.println "ERROR: ${msg}"
         System.exit(1)
     }
 
@@ -157,15 +159,17 @@ def parseSampleSheet(sampleSheetPath) {
     }
 
     if (errors.size() > 0) {
-        log.error "Sample sheet validation failed with ${errors.size()} error(s):"
-        errors.each { error ->
-            log.error "  ${error}"
-        }
+        def msg = "Sample sheet validation failed with ${errors.size()} error(s):\n" +
+                  errors.collect { e -> "  ${e}" }.join('\n')
+        log.error msg
+        System.err.println "ERROR: ${msg}"
         System.exit(1)
     }
 
     if (sampleSheet.size() == 0) {
-        log.error "ERROR: Sample sheet contains no data rows"
+        def msg = "Sample sheet contains no data rows"
+        log.error msg
+        System.err.println "ERROR: ${msg}"
         System.exit(1)
     }
 
