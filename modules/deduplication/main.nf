@@ -24,15 +24,21 @@ process umitoolsDedup {
         mode: 'copy',
         pattern: '*.bam',
         enabled: params.publish_bam_dedup ?: false
+    publishDir "${params.output_dir}/logs/umitools/",
+        mode: 'copy',
+        pattern: '*.log',
+        enabled: params.publish_qc_dedup_logs ?: false
 
     input:
     tuple val(sample_id), path(input_bam), path(input_bai)
 
     output:
     tuple val(sample_id), path(dedup_bam), emit: bam
+    path(dedup_log), emit: log
 
     script:
     dedup_bam = "${sample_id}_dedup.bam"
+    dedup_log = "${sample_id}_dedup.log"
     """
     umi_tools dedup \\
         --per-gene \\
@@ -41,6 +47,7 @@ process umitoolsDedup {
         --cell-tag=CB \\
         --extract-umi-method=tag \\
         --umi-tag=UB \\
+        -L ${dedup_log} \\
         -I ${input_bam} \\
         -S ${dedup_bam}
     """

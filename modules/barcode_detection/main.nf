@@ -34,7 +34,6 @@ process flexiplexGetBarcodeCandidates {
     def chemistryPatterns = getChemistryPatterns(params.chemistry)
 
     """
-    # full left-pattern is CTACACGACGCTCTTCCGATCT, but we can allow for some mismatches in the first 20 bp to capture more reads
     gunzip -c ${fastq_file} \\
         | flexiplex \\
             -p ${task.cpus} \\
@@ -51,21 +50,29 @@ process mergeFlexiplexBarcodes {
     label 'small'
     publishDir "${params.output_dir}/flexiplex_merged_barcodes/",
         mode: 'copy',
+        pattern: '*.txt',
         enabled: params.publish_flexiplex_merged
+    publishDir "${params.output_dir}/qc/knee_plots/",
+        mode: 'copy',
+        pattern: '*.png',
+        enabled: params.publish_qc_knee_plots ?: false
     tag "${sample_id}"
 
     input:
     tuple val(sample_id), path(barcode_files, stageAs: '*_barcodes_counts.txt'), path(canonical_bc_list)
 
     output:
-    tuple val(sample_id), path(merged_bc_file)
+    tuple val(sample_id), path(merged_bc_file), emit: barcodes
+    path(knee_plot), emit: knee_plot
 
     script:
     merged_bc_file = "${sample_id}_flexiplex_merged_barcodes.txt"
+    knee_plot = "${sample_id}_barcode_knee_plot.png"
     """
     #!/usr/bin/env Rscript
 
     library(tidyverse)
+    library(ggplot2)
 
     bc_list <- read_lines("${canonical_bc_list}")
 
@@ -82,6 +89,25 @@ process mergeFlexiplexBarcodes {
         filter(count > ${params.min_barcode_count}) %>%
         select(barcode) %>%
         write_tsv('${merged_bc_file}', col_names = FALSE)
+
+    plot_data <- data %>%
+        filter(barcode %in% bc_list) %>%
+        mutate(rank = row_number())
+
+    ggplot(plot_data, aes(x = rank, y = count)) +
+        geom_line() +
+        geom_vline(xintercept = sum(plot_data\$count > ${params.min_barcode_count}),
+                   linetype = "dashed", colour = "red") +
+        scale_x_log10() +
+        scale_y_log10() +
+        labs(
+            title = "${sample_id} — Barcode Knee Plot",
+            x = "Barcode rank",
+            y = "Read count"
+        ) +
+        theme_bw()
+
+    ggsave("${knee_plot}", width = 7, height = 5)
     """
 }
 
@@ -89,7 +115,7 @@ process flexiplexTagFastq {
     label 'large'
     publishDir "${params.output_dir}/flexiplex_barcoded_fastq/",
         mode: 'copy',
-        pattern: '*.fastq.gz',
+        pattern: '*.fastq.gz|*.txt.gz',
         enabled: params.publish_retagged_fastq
     publishDir "${params.output_dir}/logs/flexiplex",
         mode: 'copy',
@@ -101,11 +127,13 @@ process flexiplexTagFastq {
     tuple val(sample_id), path(fastq_file), path(barcode_file)
 
     output:
-    tuple val(sample_id), path(output_fastq), emit: 'fastq'
-    path(output_log), emit: 'log'
+    tuple val(sample_id), path(output_fastq),          emit: fastq
+    tuple val(sample_id), path(output_reads_barcodes), emit: reads_barcodes
+    path(output_log),                                  emit: log
 
     script:
     output_fastq = "${sample_id}_${fastq_file.simpleName}_tagged.fastq.gz"
+    output_reads_barcodes = "${sample_id}_reads_barcodes.txt.gz"
     output_log = "${sample_id}_${fastq_file.simpleName}_flexiplex.log"
 
     def chemistryPatterns = getChemistryPatterns(params.chemistry)
@@ -123,6 +151,7 @@ process flexiplexTagFastq {
             -n ${sample_id} \\
             -k ${barcode_file} \\
         | pigz > ${output_fastq}
+    pigz ${sample_id}_reads_barcodes.txt
     grep -vE '^INFO:|^WARNING:|million reads processed|cite us' .command.log > ${output_log}
     """
 }
