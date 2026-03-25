@@ -161,6 +161,48 @@
                     "default": true,
                     "description": "Save Vireo demultiplexing results.",
                     "fa_icon": "fas fa-save"
+                },
+                "publish_qc_cramino": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save Cramino long-read stats JSON files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_qc_flagstat": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save samtools flagstat mapping statistics.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_qc_mosdepth": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save Mosdepth genome coverage files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_qc_dedup_logs": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save UMI-tools deduplication log files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_qc_knee_plots": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save Flexiplex barcode knee plot PNG files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_qc_read_tracking": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save per-sample read tracking TSV files.",
+                    "fa_icon": "fas fa-save"
+                },
+                "publish_qc_multiqc": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Save MultiQC aggregated HTML report.",
+                    "fa_icon": "fas fa-save"
                 }
             }
         }
