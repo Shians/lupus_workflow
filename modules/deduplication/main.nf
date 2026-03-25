@@ -18,7 +18,7 @@ process sortIndexBam {
 }
 
 process umitoolsDedup {
-    label 'medium'
+    label 'large'
     tag "$sample_id"
     publishDir "${params.output_dir}/bam_dedup/",
         mode: 'copy',
