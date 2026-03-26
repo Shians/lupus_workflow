@@ -55,7 +55,7 @@ process mosdepthCoverage {
 
     script:
     """
-    mosdepth --fast-mode --no-abbrev -t ${task.cpus} ${sample_id} ${bam}
+    mosdepth --fast-mode -t ${task.cpus} ${sample_id} ${bam}
     """
 }
 
