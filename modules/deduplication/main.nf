@@ -1,3 +1,20 @@
+process indexBam {
+    label 'medium'
+    tag "$sample_id"
+
+    input:
+    tuple val(sample_id), path(input_bam)
+
+    output:
+    tuple val(sample_id), path(input_bam), path(input_bai), emit: bam_bai
+
+    script:
+    input_bai = "${input_bam}.bai"
+    """
+    samtools index ${input_bam}
+    """
+}
+
 process sortIndexBam {
     label 'medium'
     tag "$sample_id"
