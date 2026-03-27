@@ -7,6 +7,7 @@ include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
 include { flexiplexGetBarcodeCandidates; mergeFlexiplexBarcodes; flexiplexTagFastq } from './modules/barcode_detection/main.nf'
 include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './modules/alignment/main.nf'
 include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByName } from './modules/postprocessing/main.nf'
+include { indexBam } from './modules/deduplication/main.nf'
 include { sortIndexBam } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
@@ -111,10 +112,12 @@ workflow {
         snp_annotation_path = channel.fromPath(params.snp_annotation)
 
         // Prepare input for CellSNP: combine BAMs with their barcode lists
-        cellsnp_input = dedup_bam_genome.bam
+        dedup_bam_genome_indexed = indexBam(dedup_bam_genome.bam)
+
+        cellsnp_input = dedup_bam_genome_indexed.bam_bai
             .join(flexiplex_bc)
             .map { sample_id, bam, bai, barcode_file ->
-                tuple([bam], [bai], barcode_file, sample_id)
+                tuple(bam, bai, barcode_file, sample_id)
             }
             .combine(snp_annotation_path)
 
