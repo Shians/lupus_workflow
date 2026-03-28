@@ -94,14 +94,25 @@ process mergeFlexiplexBarcodes {
         filter(barcode %in% bc_list) %>%
         mutate(rank = row_number())
 
+    n_total <- nrow(plot_data)
+    n_passed <- sum(plot_data\$count > ${params.min_barcode_count})
+    pct <- ifelse(n_total > 0, round(n_passed / n_total * 100, 1), 0)
+    subtitle <- glue::glue(
+        "{n_passed} / {n_total} barcodes passed ({pct}%),  min count = {min_count}",
+        min_count = ${params.min_barcode_count}
+    )
+
     ggplot(plot_data, aes(x = rank, y = count)) +
         geom_line() +
-        geom_vline(xintercept = sum(plot_data\$count > ${params.min_barcode_count}),
-                   linetype = "dashed", colour = "red") +
+        geom_vline(
+            xintercept = n_passed,
+            linetype = "dashed", colour = "red"
+        ) +
         scale_x_log10() +
         scale_y_log10() +
         labs(
             title = "${sample_id} — Barcode Knee Plot",
+            subtitle = subtitle,
             x = "Barcode rank",
             y = "Read count"
         ) +
