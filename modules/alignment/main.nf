@@ -1,7 +1,7 @@
 process alignMinimap2Spliced {
     label 'large'
     tag "$sample"
-    array 1000
+    array 100
 
     input:
     tuple val(sample), path(fastq), path(ref)
@@ -23,7 +23,7 @@ process alignMinimap2Spliced {
 process alignMinimap2TranscriptomeUnsorted {
     label 'large'
     tag "$sample"
-    array 1000
+    array 100
 
     input:
     tuple val(sample), path(fastq), path(ref)
