@@ -20,7 +20,7 @@ process runCellSNPGenotype {
     cellsnp-lite -s ${bam_paths} \
         -b ${barcode_path} \
         -O ${output_path} \
-        -R ${snp_annotation} \
+        -T ${snp_annotation} \
         -p ${task.cpus} \
         --minMAF 0.1 \
         --minCOUNT 10 \
