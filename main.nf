@@ -15,6 +15,7 @@ include { runCellSNPGenotype; runVireoDemultiplex } from './modules/demultiplexi
 include { runOarfish } from './modules/quantification/main.nf'
 include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; multiQC } from './modules/qc/main.nf'
 include { countReads as countRawReads } from './modules/qc/main.nf'
+include { countReads as countBarcodeTaggedReads } from './modules/qc/main.nf'
 include { countReads as countGenomeAlignedReads } from './modules/qc/main.nf'
 include { countReads as countGenomeDedupReads } from './modules/qc/main.nf'
 
@@ -74,6 +75,10 @@ workflow {
     // QC: genome alignment stats and read count
     flagstat_out = samtoolsFlagstat(merged_spliced_bams)
     mosdepth_out = mosdepthCoverage(merged_spliced_bams)
+    // PRIMARY (mapped + unmapped) on the aligned BAM = reads that survived barcode
+    // tagging and entered alignment. Gap vs. raw = reads dropped in flexiplex;
+    // gap vs. PRIMARY_MAPPED = reads that failed to align.
+    tagged_counts_ch = countBarcodeTaggedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_barcode_tagging', 'PRIMARY') })
     genome_counts_ch = countGenomeAlignedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_genome_alignment', 'PRIMARY_MAPPED') })
 
     // UMI deduplication
@@ -94,6 +99,7 @@ workflow {
 
     // Read tracking summary
     all_counts_ch = raw_counts_ch
+        .mix(tagged_counts_ch)
         .mix(genome_counts_ch)
         .mix(dedup_genome_counts_ch)
         .groupTuple()
