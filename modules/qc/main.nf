@@ -73,6 +73,7 @@ process countReads {
     count_file = "${sample_id}_${stage}_count.txt"
     def mode_flags = [
         ALL            : '',
+        PRIMARY        : '-F 0x900',
         PRIMARY_MAPPED : '-F 0x904'
     ]
     def flags = mode_flags[count_mode]

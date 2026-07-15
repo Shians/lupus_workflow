@@ -38,7 +38,7 @@ workflow {
 
     // QC: Cramino stats and raw read counts run in parallel with BAM conversion
     cramino_out = craminoStats(bam_channel)
-    raw_counts_ch = countRawReads(bam_channel.map { sample_id, bam -> tuple(sample_id, bam, 'input_bam', 'ALL') })
+    raw_counts_ch = countRawReads(bam_channel.map { sample_id, bam -> tuple(sample_id, bam, 'input_bam', 'PRIMARY') })
 
     // Convert each BAM to FASTQ in parallel
     untagged_fastq_files = bamToFastq(bam_channel)
