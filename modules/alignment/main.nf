@@ -35,7 +35,7 @@ process alignMinimap2TranscriptomeUnsorted {
     out_bam = fastq.baseName + ".bam"
 
     """
-    minimap2 -t ${task.cpus} -a -y --rev-only ${ref} ${fastq} | \
+    minimap2 -t ${task.cpus} -ax lr:hq -y --eqx -N 100 ${ref} ${fastq} | \
         samtools view -b | \
         samtools sort > ${out_bam}
     samtools index ${out_bam}
