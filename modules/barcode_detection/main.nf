@@ -1,4 +1,6 @@
 def getChemistryPatterns(chemistry) {
+    // https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium3.html
+    // https://teichlab.github.io/scg_lib_structs/methods_html/10xChromium5.html
     if (chemistry == '3v1') {
         return [prefix: "GACGCTCTTCCGATCT", barcode: "??????????????", umi: "??????????", suffix: "TTTTTTTT"]
     } else if (chemistry == '3v2') {
