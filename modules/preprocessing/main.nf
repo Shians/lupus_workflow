@@ -1,5 +1,5 @@
 process bamToFastq {
-    label 'small'
+    label 'small_x4cpu'
     publishDir "${params.output_dir}/fastq/",
         mode: 'copy',
         pattern: '*.fastq.gz',
