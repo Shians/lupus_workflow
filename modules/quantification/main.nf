@@ -20,6 +20,7 @@ process runOarfish {
         -j ${task.cpus} \
         --single-cell \
         --model-coverage \
+        --filter-group no-filters \
         --output ${output_dir}/sample \
         --alignments ${input_bam}
     """
