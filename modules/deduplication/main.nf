@@ -58,8 +58,6 @@ process umitoolsDedup {
     dedup_log = "${sample_id}_dedup.log"
     """
     umi_tools dedup \\
-        --per-gene \\
-        --per-contig \\
         --per-cell \\
         --cell-tag=CB \\
         --extract-umi-method=tag \\
