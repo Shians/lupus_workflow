@@ -6,7 +6,7 @@ include { buildMinimapIndexGenome; buildMinimapIndexTranscriptome } from './modu
 include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
 include { flexiplexGetBarcodeCandidates; mergeFlexiplexBarcodes; flexiplexTagFastq } from './modules/barcode_detection/main.nf'
 include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './modules/alignment/main.nf'
-include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByName } from './modules/postprocessing/main.nf'
+include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByCellBarcode } from './modules/postprocessing/main.nf'
 include { indexBam } from './modules/deduplication/main.nf'
 include { sortIndexBam } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/main.nf'
@@ -94,7 +94,7 @@ workflow {
         | umitoolsDedupTranscriptome
 
     dedup_bam_transcriptome.bam
-        | sortBamByName
+        | sortBamByCellBarcode
         | runOarfish
 
     // Read tracking summary

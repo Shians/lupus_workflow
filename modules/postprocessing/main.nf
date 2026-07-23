@@ -56,7 +56,7 @@ process combineMergedSplicedBams {
     """
 }
 
-process sortBamByName {
+process sortBamByCellBarcode {
     label 'medium'
     tag "$sample"
 
@@ -67,8 +67,8 @@ process sortBamByName {
     tuple val(sample), path(output_bam)
 
     script:
-    output_bam = "${sample}_sorted.bam"
+    output_bam = "${sample}_cb_sorted.bam"
     """
-    samtools sort -@ ${task.cpus} -n -o ${output_bam} ${input_bam}
+    samtools sort -@ ${task.cpus} -t CB -o ${output_bam} ${input_bam}
     """
 }
