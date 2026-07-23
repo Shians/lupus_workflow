@@ -76,6 +76,26 @@
                 }
             }
         },
+        "genotyping_options": {
+            "title": "Genotyping Options",
+            "type": "object",
+            "fa_icon": "fas fa-dna",
+            "properties": {
+                "cellsnp_sharded": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Shard cellSNP genotyping across many right-sized array jobs (split target VCF, run per-chunk, merge) instead of one monolithic job. Set false to use the single-job path.",
+                    "fa_icon": "fas fa-th"
+                },
+                "cellsnp_chunks": {
+                    "type": "integer",
+                    "default": 100,
+                    "minimum": 1,
+                    "description": "Number of balanced target-VCF shards to run in parallel when cellsnp_sharded is enabled.",
+                    "fa_icon": "fas fa-puzzle-piece"
+                }
+            }
+        },
         "deduplication_options": {
             "title": "Deduplication Options",
             "type": "object",
@@ -231,6 +251,7 @@
         { "$ref": "#/defs/input_options" },
         { "$ref": "#/defs/output_options" },
         { "$ref": "#/defs/alignment_options" },
+        { "$ref": "#/defs/genotyping_options" },
         { "$ref": "#/defs/deduplication_options" },
         { "$ref": "#/defs/barcode_detection_options" },
         { "$ref": "#/defs/publish_options" }

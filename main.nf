@@ -12,7 +12,7 @@ include { sortIndexBam } from './modules/deduplication/main.nf'
 include { nailpolishDedup } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
-include { runCellSNPGenotype; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
+include { runCellSNPGenotype; splitCellSNPTargets; runCellSNPGenotypeChunk; mergeCellSNP; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
 include { runOarfish } from './modules/quantification/main.nf'
 include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; multiQC } from './modules/qc/main.nf'
 include { countReads as countRawReads } from './modules/qc/main.nf'
@@ -148,17 +148,46 @@ workflow {
     if (params.snp_annotation) {
         snp_annotation_path = channel.fromPath(params.snp_annotation)
 
-        // Prepare input for CellSNP: combine BAMs with their barcode lists.
+        // Prepare per-sample (bam, bai, barcode, sample_id) tuples for CellSNP.
         // genome_bam_indexed is (sample_id, bam, bai) in both dedup modes.
-        cellsnp_input = genome_bam_indexed
+        cellsnp_bam_bc = genome_bam_indexed
             .join(flexiplex_bc)
             .map { sample_id, bam, bai, barcode_file ->
                 tuple(bam, bai, barcode_file, sample_id)
             }
-            .combine(snp_annotation_path)
 
-        // Run CellSNP genotyping (always runs when snp_annotation is provided)
-        cellsnp_results = runCellSNPGenotype(cellsnp_input)
+        // CellSNP genotyping: either one monolithic job (default) or, when
+        // params.cellsnp_sharded is set, split the target VCF into balanced
+        // chunks, genotype each as an independent right-sized array job, and
+        // merge back into a single cellSNP directory (identical to a single
+        // run, so Vireo consumes it unchanged). See modules/demultiplexing.
+        if (params.cellsnp_sharded) {
+            // One tuple per chunk VCF, tagged with its zero-padded index taken
+            // from the "part_<idx>.vcf" filename so ordering is deterministic.
+            target_chunks = splitCellSNPTargets(
+                    snp_annotation_path.map { vcf -> tuple(vcf, params.cellsnp_chunks) }
+                )
+                .flatMap { chunk_files -> (chunk_files instanceof List) ? chunk_files : [chunk_files] }
+                .map { chunk_vcf ->
+                    def chunk_index = (chunk_vcf.name =~ /part_(\d+)\.vcf/)[0][1]
+                    tuple(chunk_index, chunk_vcf)
+                }
+
+            // Cartesian product: every sample against every target chunk.
+            cellsnp_chunk_input = cellsnp_bam_bc
+                .combine(target_chunks)
+                .map { bam, bai, barcode_file, sample_id, chunk_index, chunk_vcf ->
+                    tuple(bam, bai, barcode_file, sample_id, chunk_index, chunk_vcf)
+                }
+
+            cellsnp_results = runCellSNPGenotypeChunk(cellsnp_chunk_input)
+                .map { suffix, _chunk_index, chunk_dir -> tuple(suffix, chunk_dir) }
+                .groupTuple()
+                | mergeCellSNP
+        } else {
+            cellsnp_input = cellsnp_bam_bc.combine(snp_annotation_path)
+            cellsnp_results = runCellSNPGenotype(cellsnp_input)
+        }
 
         // Conditionally run Vireo demultiplexing
         if (params.vireo_sample_sheet) {
