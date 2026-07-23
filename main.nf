@@ -9,6 +9,7 @@ include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './mod
 include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByCellBarcode } from './modules/postprocessing/main.nf'
 include { indexBam } from './modules/deduplication/main.nf'
 include { sortIndexBam } from './modules/deduplication/main.nf'
+include { nailpolishDedup } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
 include { runCellSNPGenotype; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
@@ -60,8 +61,21 @@ workflow {
         .combine(flexiplex_bc, by: 0)
         | flexiplexTagFastq
 
+    // Deduplication strategy (see params.dedup_method):
+    //   'nailpolish' - molecular (CB+UMI) consensus dedup at the FASTQ level, before
+    //                  alignment. Each molecule aligns once, preserving the full
+    //                  multimapping set for oarfish, and serves both the genome
+    //                  (CellSNP) and transcriptome (oarfish) paths from one step.
+    //   'umitools'   - legacy post-alignment position-based dedup, run separately on
+    //                  the genome and transcriptome BAMs (kept for validation).
+    if (params.dedup_method == 'nailpolish') {
+        reads_for_alignment = nailpolishDedup(tagged_fastq_files.fastq).fastq
+    } else {
+        reads_for_alignment = tagged_fastq_files.fastq
+    }
+
     // Split FASTQ into chunks for parallel alignment
-    fastq_chunks = tagged_fastq_files.fastq
+    fastq_chunks = reads_for_alignment
         .map { sample, fastq -> tuple(sample, fastq, params.bam_parts) }
         | splitFastqChunks
         | transpose
@@ -75,25 +89,42 @@ workflow {
     // QC: genome alignment stats and read count
     flagstat_out = samtoolsFlagstat(merged_spliced_bams)
     mosdepth_out = mosdepthCoverage(merged_spliced_bams)
-    // PRIMARY (mapped + unmapped) on the aligned BAM = reads that survived barcode
-    // tagging and entered alignment. Gap vs. raw = reads dropped in flexiplex;
-    // gap vs. PRIMARY_MAPPED = reads that failed to align.
-    tagged_counts_ch = countBarcodeTaggedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_barcode_tagging', 'PRIMARY') })
+    // In nailpolish mode the aligned BAM is already deduplicated (dedup happened on the
+    // FASTQ), so this first count reflects deduplicated molecules; in umitools mode it
+    // reflects reads that entered alignment, before the post-alignment dedup below.
+    aligned_stage = params.dedup_method == 'nailpolish' ? 'after_dedup_aligned' : 'after_barcode_tagging'
+    tagged_counts_ch = countBarcodeTaggedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, aligned_stage, 'PRIMARY') })
     genome_counts_ch = countGenomeAlignedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_genome_alignment', 'PRIMARY_MAPPED') })
 
-    // UMI deduplication
-    dedup_bam_genome = umitoolsDedupGenome(merged_spliced_bams)
-    dedup_genome_counts_ch = countGenomeDedupReads(dedup_bam_genome.bam.map { sample_id, bam -> tuple(sample_id, bam, 'after_genome_dedup', 'PRIMARY_MAPPED') })
+    // Genome dedup + indexed BAM for CellSNP.
+    if (params.dedup_method == 'nailpolish') {
+        // Reads were already deduplicated at the FASTQ level; the merged spliced BAM is
+        // already coordinate-sorted and indexed by mergeSpliceAlignedBams.
+        genome_bam_indexed = merged_spliced_bams
+        dedup_genome_counts_ch = channel.empty()
+    } else {
+        dedup_bam_genome = umitoolsDedupGenome(merged_spliced_bams)
+        dedup_genome_counts_ch = countGenomeDedupReads(dedup_bam_genome.bam.map { sample_id, bam -> tuple(sample_id, bam, 'after_genome_dedup', 'PRIMARY_MAPPED') })
+        genome_bam_indexed = indexBam(dedup_bam_genome.bam).bam_bai
+    }
 
-    // Transcript quantification
-    dedup_bam_transcriptome = fastq_chunks.combine(transcriptome_index)
+    // Transcript alignment
+    transcript_aligned = fastq_chunks.combine(transcriptome_index)
         | alignMinimap2TranscriptomeUnsorted
         | groupTuple
         | catTranscriptAlignedBams
-        | sortIndexBam
-        | umitoolsDedupTranscriptome
 
-    dedup_bam_transcriptome.bam
+    // Transcript dedup: nailpolish already deduplicated pre-alignment, so feed the
+    // concatenated BAM straight through; umitools dedups the sorted transcriptome BAM.
+    if (params.dedup_method == 'nailpolish') {
+        transcript_bam = transcript_aligned
+    } else {
+        sorted_indexed_transcript = sortIndexBam(transcript_aligned)
+        transcript_bam = umitoolsDedupTranscriptome(sorted_indexed_transcript).bam
+    }
+
+    // oarfish requires the BAM collated by cell barcode
+    transcript_bam
         | sortBamByCellBarcode
         | runOarfish
 
@@ -117,10 +148,9 @@ workflow {
     if (params.snp_annotation) {
         snp_annotation_path = channel.fromPath(params.snp_annotation)
 
-        // Prepare input for CellSNP: combine BAMs with their barcode lists
-        dedup_bam_genome_indexed = indexBam(dedup_bam_genome.bam)
-
-        cellsnp_input = dedup_bam_genome_indexed.bam_bai
+        // Prepare input for CellSNP: combine BAMs with their barcode lists.
+        // genome_bam_indexed is (sample_id, bam, bai) in both dedup modes.
+        cellsnp_input = genome_bam_indexed
             .join(flexiplex_bc)
             .map { sample_id, bam, bai, barcode_file ->
                 tuple(bam, bai, barcode_file, sample_id)
