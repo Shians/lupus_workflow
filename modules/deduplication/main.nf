@@ -44,19 +44,23 @@ process nailpolishDedup {
     // split by the clustering step, and each true group is consensus-called (error
     // corrected) into a single read. CB:Z/UB:Z tags are carried in the FASTQ comment
     // and propagated into the BAM by minimap2 -y downstream.
-    // nailpolish reads gzipped FASTQ directly (index builds a companion gzip index for
-    // random access), so the tagged .fastq.gz is fed through without decompression.
+    // nailpolish can read gzipped FASTQ, but doing so incurs a large performance hit
+    // (every index/summary/consensus pass re-inflates the file), so the tagged
+    // .fastq.gz is decompressed once up front and all commands run on the plain FASTQ.
     def barcode_regex = getBarcodeUmiRegex(params.chemistry)
+    tagged_plain = "${sample_id}_tagged.fastq"
     dedup_fastq  = "${sample_id}_dedup.fastq.gz"
     summary_html = "${sample_id}.summary.html"
     """
-    nailpolish index ${tagged_fastq} \\
+    pigz -dc -p ${task.cpus} ${tagged_fastq} > ${tagged_plain}
+
+    nailpolish index ${tagged_plain} \\
         --barcode-regex "${barcode_regex}" \\
         --skip-unmatched
 
-    nailpolish summary ${tagged_fastq} -o ${summary_html}
+    nailpolish summary ${tagged_plain} -o ${summary_html}
 
-    nailpolish consensus ${tagged_fastq} \\
+    nailpolish consensus ${tagged_plain} \\
         -t ${task.cpus} \\
         -o ${sample_id}_dedup.fastq
 
