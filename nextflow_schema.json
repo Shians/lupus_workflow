@@ -37,7 +37,7 @@
                 "snp_annotation": {
                     "type": "string",
                     "format": "file-path",
-                    "description": "Path to VCF file with SNP positions for CellSNP genotyping. Enables genotyping when provided.",
+                    "description": "Path to VCF file with SNP positions for CellSNP genotyping. Enables genotyping when provided. Sorted into coordinate order by bcftools before use; must otherwise be a valid VCF.",
                     "fa_icon": "fas fa-map-marker-alt"
                 },
                 "vireo_sample_sheet": {
@@ -83,7 +83,7 @@
             "properties": {
                 "cellsnp_sharded": {
                     "type": "boolean",
-                    "default": false,
+                    "default": true,
                     "description": "Shard cellSNP genotyping across many right-sized array jobs (split target VCF, run per-chunk, merge) instead of one monolithic job. Set false to use the single-job path.",
                     "fa_icon": "fas fa-th"
                 },

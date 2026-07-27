@@ -1,3 +1,93 @@
+// cellsnp-lite site filters scaled to the size of the donor pool.
+//
+// minMAF: cellsnp-lite pools REF/ALT counts across every cell in the library,
+//   so for D equally represented donors a SNP where exactly one donor is
+//   heterozygous -- the most abundant informative class, and the one that most
+//   cleanly fingerprints an individual donor -- has pooled MAF 0.5/D. Filtering
+//   at 0.5/D would sit exactly on that boundary, where uneven donor
+//   representation or sampling noise drops the site, so the threshold is halved
+//   to 0.25/D. That tolerates a donor contributing as little as half its
+//   balanced share of cells. Capped at 0.1 (the conventional small-pool value;
+//   a looser filter buys nothing when donors are few) and floored at 0.01
+//   (below that, residual ONT error competes with true signal even on the
+//   curated -T list).
+//
+// minCOUNT: derived from minMAF rather than from the donor count directly. At
+//   a site with N molecules the observable MAFs are 0, 1/N, 2/N, ..., so a
+//   minMAF below 1/N passes every site carrying even one minor-allele molecule
+//   and the filter silently stops discriminating. Requiring N >= 1/minMAF makes
+//   the threshold mean "at least one minor-allele molecule", the weakest form
+//   that still does work. Floored at the cellsnp-lite/Vireo standard of 20,
+//   which is a data-quality floor and does not depend on D.
+//
+//   Note this does NOT scale because Vireo needs per-donor depth at each site.
+//   It does not: Vireo pools evidence across the whole matrix, and assignment
+//   aggregates many sites per cell rather than resolving each site across all
+//   donors. Larger pools want more sites, not deeper ones. If a large-D run
+//   collapses the retained site count on ONT depth, raise the minMAF floor
+//   below and let minCOUNT follow it down -- do not chase depth this data
+//   does not have.
+//
+// Shared by the monolithic and sharded processes so the two paths cannot drift
+// apart. Both filters are computed per-SNP from that SNP's own pileup, so they
+// are shard-invariant and the sharded output stays comparable to a single run.
+def cellsnpDonorFilters(n_donors) {
+    def donors = n_donors as Integer
+    if (donors < 1) {
+        error "n_donors must be >= 1 to scale cellSNP filters, got: ${n_donors}"
+    }
+    def min_maf = Math.min(0.1d, Math.max(0.01d, 0.25d / donors))
+    def min_count = Math.max(20, Math.ceil(1.0d / min_maf) as Integer)
+    return [minMAF: String.format('%.4f', min_maf), minCOUNT: min_count]
+}
+
+// Normalise the target SNP list to coordinate order once, before it fans out
+// to either cellSNP path.
+//
+// cellsnp-lite emits sites in target-file order, so the order of this file is
+// the order of every downstream cellSNP directory. Sorting here means the
+// monolithic and sharded paths are comparable row-for-row rather than only as
+// sets, and it is the precondition for ever merging sharded chunks back into
+// coordinate order: a round-robin chunk of a sorted VCF is itself sorted, so
+// the merge can be an ordered k-way merge instead of a blind concatenation.
+//
+// Sorting only. The VCF is taken as given -- a missing ##fileformat line,
+// absent ##contig headers, or duplicate records are the caller's to fix, and
+// bcftools will complain about them far more clearly than we could.
+process sortSNPAnnotation {
+    label 'small'
+    tag "Sort SNP annotation"
+
+    input:
+    path snp_annotation
+
+    output:
+    path output_path, emit: vcf
+    path contig_order_path, emit: contig_order
+
+    script:
+    output_path = "sorted_snp_annotation.vcf.gz"
+    contig_order_path = "contig_order.txt"
+    // Leave headroom below the tier limit: -m caps bcftools' in-core buffer,
+    // not the process, and exceeding it spills to -T rather than failing.
+    def sort_memory = Math.max(1, (task.memory.toGiga() as Integer) - 2)
+    """
+    bcftools sort \
+        -m ${sort_memory}G \
+        -T . \
+        -Oz \
+        -o ${output_path} \
+        ${snp_annotation}
+
+    # The contig ordering bcftools actually produced, which mergeCellSNP needs
+    # to rebuild that same order from the chunks. Taken from the records rather
+    # than the ##contig header lines, which need not be present or complete.
+    # Sorting makes each contig contiguous, so uniq collapses it to first
+    # appearance.
+    bcftools query -f '%CHROM\\n' ${output_path} | uniq > ${contig_order_path}
+    """
+}
+
 process runCellSNPGenotype {
     label 'large'
     publishDir "${params.output_dir}/cell_snp/",
@@ -6,7 +96,7 @@ process runCellSNPGenotype {
     tag "CellSNP-genotype ${suffix}"
 
     input:
-    tuple path(bam_paths), path(path_indices), path(barcode_path), val(suffix), path(snp_annotation)
+    tuple path(bam_paths), path(path_indices), path(barcode_path), val(suffix), val(n_donors), path(snp_annotation)
 
     output:
     tuple path(output_path), val(suffix)
@@ -14,6 +104,7 @@ process runCellSNPGenotype {
     script:
     output_path = "cellsnp_" + suffix
     bam_paths = bam_paths.join(",")
+    def filters = cellsnpDonorFilters(n_donors)
     """
     echo ${bam_paths}
     mkdir -p cellsnp
@@ -22,8 +113,8 @@ process runCellSNPGenotype {
         -O ${output_path} \
         -T ${snp_annotation} \
         -p ${task.cpus} \
-        --minMAF 0.1 \
-        --minCOUNT 10 \
+        --minMAF ${filters.minMAF} \
+        --minCOUNT ${filters.minCOUNT} \
         --gzip --genotype
     """
 }
@@ -51,7 +142,7 @@ process runCellSNPGenotypeChunk {
     tag "CellSNP-genotype ${suffix} chunk ${chunk_index}"
 
     input:
-    tuple path(bam_paths), path(path_indices), path(barcode_path), val(suffix), val(chunk_index), path(snp_chunk)
+    tuple path(bam_paths), path(path_indices), path(barcode_path), val(suffix), val(n_donors), val(chunk_index), path(snp_chunk)
 
     output:
     tuple val(suffix), val(chunk_index), path(output_path)
@@ -59,14 +150,15 @@ process runCellSNPGenotypeChunk {
     script:
     output_path = "cellsnp_" + suffix + "_chunk_" + chunk_index
     bam_paths = bam_paths.join(",")
+    def filters = cellsnpDonorFilters(n_donors)
     """
     cellsnp-lite -s ${bam_paths} \
         -b ${barcode_path} \
         -O ${output_path} \
         -T ${snp_chunk} \
         -p ${task.cpus} \
-        --minMAF 0.1 \
-        --minCOUNT 10 \
+        --minMAF ${filters.minMAF} \
+        --minCOUNT ${filters.minCOUNT} \
         --gzip --genotype
     """
 }
@@ -79,7 +171,7 @@ process mergeCellSNP {
     tag "CellSNP-merge ${suffix}"
 
     input:
-    tuple val(suffix), path(chunk_dirs)
+    tuple val(suffix), path(chunk_dirs), path(contig_order)
 
     output:
     tuple path(output_path), val(suffix)
@@ -87,7 +179,7 @@ process mergeCellSNP {
     script:
     output_path = "cellsnp_" + suffix
     """
-    merge_cellsnp.py ${output_path} ${chunk_dirs}
+    merge_cellsnp.py ${output_path} ${contig_order} ${chunk_dirs}
     """
 }
 
