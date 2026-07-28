@@ -151,7 +151,16 @@ process filterTargetsByDepth {
     output_path = "depth_filtered_snp_annotation.vcf.gz"
     """
     cat ${depth_beds} | sort -k1,1 -k2,2n -u > kept_sites.bed
-    bcftools view -R kept_sites.bed ${snp_annotation} -Oz -o ${output_path}
+
+    # -T, not -R: -R index-jumps and so requires a .csi/.tbi that
+    # sortSNPAnnotation does not produce, while -T streams the whole VCF and
+    # needs no index. Streaming is the right access pattern anyway -- the kept
+    # set is a large fraction of a genome-wide list, not a handful of regions --
+    # and it emits records in VCF order rather than in kept_sites.bed order,
+    # which is what keeps the output coordinate-sorted for splitCellSNPTargets
+    # and mergeCellSNP. The .bed suffix is load-bearing: it is how bcftools
+    # knows to read the file as 0-based half-open rather than 1-based.
+    bcftools view -T kept_sites.bed ${snp_annotation} -Oz -o ${output_path}
     """
 }
 
