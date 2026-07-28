@@ -89,7 +89,7 @@
                 },
                 "cellsnp_chunks": {
                     "type": "integer",
-                    "default": 64,
+                    "default": 128,
                     "minimum": 1,
                     "description": "Number of balanced target-VCF shards to run in parallel when cellsnp_sharded is enabled.",
                     "fa_icon": "fas fa-puzzle-piece"
