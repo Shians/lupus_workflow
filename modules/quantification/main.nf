@@ -1,5 +1,5 @@
 process runOarfish {
-    label 'medium'
+    label 'large'
     publishDir "${params.output_dir}/oarfish/",
         mode: "copy",
         enabled: params.publish_oarfish
