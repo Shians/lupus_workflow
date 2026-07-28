@@ -89,10 +89,23 @@
                 },
                 "cellsnp_chunks": {
                     "type": "integer",
-                    "default": 100,
+                    "default": 64,
                     "minimum": 1,
                     "description": "Number of balanced target-VCF shards to run in parallel when cellsnp_sharded is enabled.",
                     "fa_icon": "fas fa-puzzle-piece"
+                },
+                "filter_targets_by_depth": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Depth pre-filter the cellSNP target list: drop sites with no meaningful pooled read depth in any sample before the expensive per-cell cellSNP pileup runs.",
+                    "fa_icon": "fas fa-filter"
+                },
+                "min_target_depth": {
+                    "type": "integer",
+                    "default": 20,
+                    "minimum": 1,
+                    "description": "Minimum pooled read depth for a target site to survive filter_targets_by_depth.",
+                    "fa_icon": "fas fa-layer-group"
                 }
             }
         },

@@ -88,6 +88,73 @@ process sortSNPAnnotation {
     """
 }
 
+// Cheap depth sieve ahead of cellSNP genotyping.
+//
+// mosdepth --by only needs alignment coordinates, not per-base quality or a
+// genotype-likelihood model, so it is dramatically cheaper per site than
+// cellsnp-lite's own per-cell pileup: this touches each sample's BAM once,
+// where cellsnp-lite would touch it once per cell barcode. Sites with no
+// coverage in a sample contribute nothing to that sample's genotyping and
+// would be dropped by cellsnp-lite's own minCOUNT filter anyway (see
+// cellsnpDonorFilters above) -- this just does that filtering before the
+// expensive per-cell pass instead of after it.
+process computeTargetDepth {
+    label 'medium'
+    tag "Target-depth ${sample_id}"
+
+    input:
+    tuple path(bam), path(bai), val(sample_id), path(snp_annotation)
+
+    output:
+    path output_path
+
+    script:
+    output_path = "depth_${sample_id}.bed"
+    """
+    bcftools query -f '%CHROM\\t%POS\\n' ${snp_annotation} \
+        | awk -v OFS='\t' '{print \$1, \$2-1, \$2}' > candidate_sites.bed
+
+    mosdepth --fast-mode --no-per-base -t ${task.cpus} \
+        --by candidate_sites.bed sample ${bam}
+
+    zcat sample.regions.bed.gz \
+        | awk -v OFS='\t' -v min=${params.min_target_depth} '\$4 >= min {print \$1, \$2, \$3}' \
+        > ${output_path}
+    """
+}
+
+// Unions the per-sample kept-site BEDs from computeTargetDepth and filters
+// the sorted target VCF down to that union.
+//
+// A site is kept if ANY sample clears the depth floor, not only if every
+// sample does. Both the sharded and monolithic cellSNP paths below genotype
+// every sample against one shared target list, so this must not drop a site
+// that a later sample actually has coverage at just because an earlier
+// sample lacked it -- per-sample-aware filtering still happens downstream via
+// the per-SNP minMAF/minCOUNT filters in cellsnpDonorFilters. This step only
+// removes sites that are dead weight for every sample in the run.
+process filterTargetsByDepth {
+    label 'small'
+    publishDir "${params.output_dir}/cell_snp/",
+        mode: 'copy',
+        enabled: params.publish_cell_snp
+    tag "Filter targets by depth"
+
+    input:
+    path depth_beds
+    path snp_annotation
+
+    output:
+    path output_path
+
+    script:
+    output_path = "depth_filtered_snp_annotation.vcf.gz"
+    """
+    cat ${depth_beds} | sort -k1,1 -k2,2n -u > kept_sites.bed
+    bcftools view -R kept_sites.bed ${snp_annotation} -Oz -o ${output_path}
+    """
+}
+
 // Render a `path` input as cellsnp-lite's comma-separated -s argument.
 //
 // Do NOT call .join(',') on the input directly. A path input arrives as a bare

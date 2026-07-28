@@ -6,13 +6,13 @@ include { buildMinimapIndexGenome; buildMinimapIndexTranscriptome } from './modu
 include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
 include { flexiplexGetBarcodeCandidates; mergeFlexiplexBarcodes; flexiplexTagFastq } from './modules/barcode_detection/main.nf'
 include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './modules/alignment/main.nf'
-include { catTranscriptAlignedBams; mergeSpliceAlignedBams; combineMergedSplicedBams; sortBamByCellBarcode } from './modules/postprocessing/main.nf'
+include { catTranscriptAlignedBams; mergeSpliceAlignedBams; sortBamByCellBarcode } from './modules/postprocessing/main.nf'
 include { indexBam } from './modules/deduplication/main.nf'
 include { sortIndexBam } from './modules/deduplication/main.nf'
 include { nailpolishDedup } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/main.nf'
 include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
-include { sortSNPAnnotation; runCellSNPGenotype; splitCellSNPTargets; runCellSNPGenotypeChunk; mergeCellSNP; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
+include { sortSNPAnnotation; computeTargetDepth; filterTargetsByDepth; runCellSNPGenotype; splitCellSNPTargets; runCellSNPGenotypeChunk; mergeCellSNP; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
 include { runOarfish } from './modules/quantification/main.nf'
 include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; multiQC } from './modules/qc/main.nf'
 include { countReads as countRawReads } from './modules/qc/main.nf'
@@ -152,7 +152,7 @@ workflow {
         // needs it to rebuild that same ordering, and every merge task reads
         // the same copy.
         sorted_snp_annotation = sortSNPAnnotation(channel.fromPath(params.snp_annotation))
-        snp_annotation_path = sorted_snp_annotation.vcf
+        sorted_snp_annotation_vcf = sorted_snp_annotation.vcf
         contig_order_path = sorted_snp_annotation.contig_order.first()
 
         // Donor counts drive both the Vireo -N argument and the cellsnp-lite
@@ -164,6 +164,24 @@ workflow {
         vireo_donors = params.vireo_sample_sheet
             ? parseVireoSampleSheet(params.vireo_sample_sheet)
             : [:]
+
+        // Depth-filter the sorted target list once here, ahead of both the
+        // monolithic and sharded branches below, so every genotyping job --
+        // whichever branch runs -- genotypes the exact same filtered VCF.
+        // See computeTargetDepth/filterTargetsByDepth in
+        // modules/demultiplexing for why this is cheap relative to the
+        // cellSNP genotyping it is trimming.
+        if (params.filter_targets_by_depth) {
+            depth_beds = genome_bam_indexed
+                .combine(sorted_snp_annotation_vcf)
+                .map { sample_id, bam, bai, vcf -> tuple(bam, bai, sample_id, vcf) }
+                | computeTargetDepth
+                | collect
+
+            snp_annotation_path = filterTargetsByDepth(depth_beds, sorted_snp_annotation_vcf)
+        } else {
+            snp_annotation_path = sorted_snp_annotation_vcf
+        }
 
         // Prepare per-sample (bam, bai, barcode, sample_id, n_donors) tuples
         // for CellSNP. genome_bam_indexed is (sample_id, bam, bai) in both

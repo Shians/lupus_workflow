@@ -38,24 +38,6 @@ process mergeSpliceAlignedBams {
     """
 }
 
-process combineMergedSplicedBams {
-    label 'medium'
-
-    input:
-    path(bam_files, stageAs: "*.bam")
-
-    output:
-    tuple path(merged_bam), path(merged_bam_index)
-
-    script:
-    merged_bam = "merged.bam"
-    merged_bam_index = "${merged_bam}.bai"
-    """
-    samtools merge -@ ${task.cpus} -o ${merged_bam} ${bam_files}
-    samtools index ${merged_bam}
-    """
-}
-
 process sortBamByCellBarcode {
     label 'medium'
     tag "$sample"
