@@ -88,6 +88,25 @@ process sortSNPAnnotation {
     """
 }
 
+// Render a `path` input as cellsnp-lite's comma-separated -s argument.
+//
+// Do NOT call .join(',') on the input directly. A path input arrives as a bare
+// java.nio.file.Path when it holds one file and only becomes a List when it
+// holds several -- and Path is itself Iterable, over its *name elements*. So
+// joining a Path silently yields "sub,dir,x.bam" for any staged path with
+// directory components, and "" for an empty Path, which getopt then misreads as
+// -s consuming the following flag. Normalise to a list of strings first.
+//
+// Shared by the monolithic and sharded processes so the two cannot drift apart.
+def cellsnpBamArg(bam_paths) {
+    def paths = (bam_paths instanceof Collection) ? bam_paths.toList() : [bam_paths]
+    def names = paths.findAll { it != null }.collect { it.toString() }
+    if (!names || names.any { it.isEmpty() }) {
+        error "cellsnp-lite needs at least one BAM for -s, got: ${bam_paths}"
+    }
+    return names.join(",")
+}
+
 process runCellSNPGenotype {
     label 'large'
     publishDir "${params.output_dir}/cell_snp/",
@@ -103,12 +122,10 @@ process runCellSNPGenotype {
 
     script:
     output_path = "cellsnp_" + suffix
-    bam_paths = bam_paths.join(",")
+    def bam_arg = cellsnpBamArg(bam_paths)
     def filters = cellsnpDonorFilters(n_donors)
     """
-    echo ${bam_paths}
-    mkdir -p cellsnp
-    cellsnp-lite -s ${bam_paths} \
+    cellsnp-lite -s "${bam_arg}" \
         -b ${barcode_path} \
         -O ${output_path} \
         -T ${snp_annotation} \
@@ -149,10 +166,10 @@ process runCellSNPGenotypeChunk {
 
     script:
     output_path = "cellsnp_" + suffix + "_chunk_" + chunk_index
-    bam_paths = bam_paths.join(",")
+    def bam_arg = cellsnpBamArg(bam_paths)
     def filters = cellsnpDonorFilters(n_donors)
     """
-    cellsnp-lite -s ${bam_paths} \
+    cellsnp-lite -s "${bam_arg}" \
         -b ${barcode_path} \
         -O ${output_path} \
         -T ${snp_chunk} \
