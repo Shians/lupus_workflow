@@ -14,11 +14,13 @@ include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/m
 include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
 include { sortSNPAnnotation; computeTargetDepth; filterTargetsByDepth; runCellSNPGenotype; splitCellSNPTargets; runCellSNPGenotypeChunk; mergeCellSNP; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
 include { runOarfish } from './modules/quantification/main.nf'
-include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; multiQC } from './modules/qc/main.nf'
+include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; aggregateReadTracking; countFastqReads; multiQC } from './modules/qc/main.nf'
 include { countReads as countRawReads } from './modules/qc/main.nf'
 include { countReads as countBarcodeTaggedReads } from './modules/qc/main.nf'
 include { countReads as countGenomeAlignedReads } from './modules/qc/main.nf'
 include { countReads as countGenomeDedupReads } from './modules/qc/main.nf'
+include { countReads as countTranscriptAlignedReads } from './modules/qc/main.nf'
+include { countReads as countTranscriptDedupReads } from './modules/qc/main.nf'
 
 workflow {
     // Validate parameters against schema and print summary
@@ -61,6 +63,15 @@ workflow {
         .combine(flexiplex_bc, by: 0)
         | flexiplexTagFastq
 
+    // Counted on the tagged FASTQ rather than downstream of alignment so that
+    // barcode-assignment loss is isolated from whatever the dedup step does. In
+    // nailpolish mode the next count sits on the far side of a tool that both
+    // drops unmatched reads and collapses molecules; without this row those two
+    // are indistinguishable.
+    tagged_fastq_counts_ch = countFastqReads(
+        tagged_fastq_files.fastq.map { sample_id, fastq -> tuple(sample_id, fastq, 'after_barcode_tagging') }
+    )
+
     // Deduplication strategy (see params.dedup_method):
     //   'nailpolish' - molecular (CB+UMI) consensus dedup at the FASTQ level, before
     //                  alignment. Each molecule aligns once, preserving the full
@@ -92,7 +103,10 @@ workflow {
     // In nailpolish mode the aligned BAM is already deduplicated (dedup happened on the
     // FASTQ), so this first count reflects deduplicated molecules; in umitools mode it
     // reflects reads that entered alignment, before the post-alignment dedup below.
-    aligned_stage = params.dedup_method == 'nailpolish' ? 'after_dedup_aligned' : 'after_barcode_tagging'
+    // The umitools label carries an _aligned suffix to distinguish it from the FASTQ-level
+    // after_barcode_tagging count above -- the two measure the same reads at different
+    // points, so a divergence between them means alignment dropped records.
+    aligned_stage = params.dedup_method == 'nailpolish' ? 'after_dedup_aligned' : 'after_barcode_tagging_aligned'
     tagged_counts_ch = countBarcodeTaggedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, aligned_stage, 'PRIMARY') })
     genome_counts_ch = countGenomeAlignedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_genome_alignment', 'PRIMARY_MAPPED') })
 
@@ -114,13 +128,25 @@ workflow {
         | groupTuple
         | catTranscriptAlignedBams
 
+    // PRIMARY_MAPPED, not PRIMARY: this aligner runs with -N 100, so an ALL count
+    // would be dominated by secondary records rather than reads.
+    transcript_counts_ch = countTranscriptAlignedReads(
+        transcript_aligned.map { sample_id, bam -> tuple(sample_id, bam, 'after_transcriptome_alignment', 'PRIMARY_MAPPED') }
+    )
+
     // Transcript dedup: nailpolish already deduplicated pre-alignment, so feed the
     // concatenated BAM straight through; umitools dedups the sorted transcriptome BAM.
     if (params.dedup_method == 'nailpolish') {
         transcript_bam = transcript_aligned
+        // transcript_bam is transcript_aligned here, so a second count would just
+        // repeat the row above.
+        dedup_transcript_counts_ch = channel.empty()
     } else {
         sorted_indexed_transcript = sortIndexBam(transcript_aligned)
         transcript_bam = umitoolsDedupTranscriptome(sorted_indexed_transcript).bam
+        dedup_transcript_counts_ch = countTranscriptDedupReads(
+            transcript_bam.map { sample_id, bam -> tuple(sample_id, bam, 'after_transcriptome_dedup', 'PRIMARY_MAPPED') }
+        )
     }
 
     // oarfish requires the BAM collated by cell barcode
@@ -130,16 +156,37 @@ workflow {
 
     // Read tracking summary
     all_counts_ch = raw_counts_ch
+        .mix(tagged_fastq_counts_ch)
         .mix(tagged_counts_ch)
         .mix(genome_counts_ch)
         .mix(dedup_genome_counts_ch)
+        .mix(transcript_counts_ch)
+        .mix(dedup_transcript_counts_ch)
         .groupTuple()
-    readCountSummary(all_counts_ch)
+    read_tracking_ch = readCountSummary(all_counts_ch)
 
-    // MultiQC: collect cramino, flagstat, and mosdepth outputs
+    // Canonical stage order for the cross-sample summary, tagged with the branch
+    // each stage sits on: 'common' is the shared trunk, and the genome and
+    // transcriptome arms fork off the last common stage. Which stages exist
+    // depends on the dedup method, so the list is built here rather than in the
+    // process.
+    stage_order = params.dedup_method == 'nailpolish'
+        ? 'input_bam:common,after_barcode_tagging:common,after_dedup_aligned:common,' +
+          'after_genome_alignment:genome,after_transcriptome_alignment:transcriptome'
+        : 'input_bam:common,after_barcode_tagging:common,' +
+          'after_barcode_tagging_aligned:genome,after_genome_alignment:genome,after_genome_dedup:genome,' +
+          'after_transcriptome_alignment:transcriptome,after_transcriptome_dedup:transcriptome'
+
+    read_tracking_summary = read_tracking_ch
+        .collect()
+        .map { tracking_files -> tuple(tracking_files, stage_order) }
+        | aggregateReadTracking
+
+    // MultiQC: collect cramino, flagstat, mosdepth and read-tracking outputs
     qc_inputs = cramino_out.map { _id, json -> json }
         .mix(flagstat_out.map { _id, txt -> txt })
         .mix(mosdepth_out.map { _id, summary, dist -> [summary, dist] })
+        .mix(read_tracking_summary.multiqc)
         .flatten()
         .collect()
     multiQC(qc_inputs)
