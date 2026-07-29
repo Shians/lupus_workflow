@@ -98,6 +98,30 @@ process sortSNPAnnotation {
 // would be dropped by cellsnp-lite's own minCOUNT filter anyway (see
 // cellsnpDonorFilters above) -- this just does that filtering before the
 // expensive per-cell pass instead of after it.
+//
+// NOT --fast-mode. mosdepth's help for that flag is "dont look at internal
+// cigar operations", which makes it count a read across its whole POS->end
+// span, introns included. On spliced RNA-seq that is a wildly different number
+// from base coverage: a single long read bridging a 100 kb intron would credit
+// every site under that intron with depth 1. Filtering on span depth means
+// sites whose only "coverage" is introns arching over them survive
+// min_target_depth, inflating the target list with sites that have no usable
+// reads -- and those sites then cost a full per-cell pileup before
+// cellsnp-lite's own minCOUNT discards them, which is the exact waste this
+// sieve exists to prevent. The floor is about usable bases, so it needs the
+// CIGAR-aware count.
+//
+// Dropping --fast-mode costs runtime in this process, which is cheap relative
+// to the per-cell cellSNP pass it is protecting.
+//
+// This depth doubles as the shard cost weight (see split_cellsnp_targets.py).
+// Span depth would model htslib's pileup queue more directly, but measuring it
+// means a second mosdepth pass for a number that changes no result -- it only
+// balances shards. Base depth is a fair proxy among the sites that survive the
+// filter, since span and base diverge sharply only under introns and those
+// sites are precisely what the filter now removes. The residual error is a
+// shard running long, and cellsnp_max_pileup already bounds the tail that made
+// balance urgent in the first place.
 process computeTargetDepth {
     label 'medium'
     tag "Target-depth ${sample_id}"
@@ -109,17 +133,36 @@ process computeTargetDepth {
     path output_path
 
     script:
-    output_path = "depth_${sample_id}.bed"
+    output_path = "depth_${sample_id}.bed.gz"
     """
+    set -o pipefail
+
     bcftools query -f '%CHROM\\t%POS\\n' ${snp_annotation} \
         | awk -v OFS='\t' '{print \$1, \$2-1, \$2}' > candidate_sites.bed
 
-    mosdepth --fast-mode --no-per-base -t ${task.cpus} \
+    mosdepth --no-per-base -t ${task.cpus} \
         --by candidate_sites.bed sample ${bam}
 
-    zcat sample.regions.bed.gz \
-        | awk -v OFS='\t' -v min=${params.min_target_depth} '\$4 >= min {print \$1, \$2, \$3}' \
-        > ${output_path}
+    # mosdepth groups its output by the BAM header's contig order, which is not
+    # required to match the target VCF's. Everything downstream assumes this
+    # file is in VCF order: aggregate_target_depth.py reads the per-sample
+    # tables row-for-row, and split_cellsnp_targets.py streams the resulting
+    # cost table alongside the filtered VCF. Both of those fail loudly on a
+    # mismatch rather than silently mispairing sites, but they fail late, in a
+    # process that has already done the expensive work. Check the precondition
+    # here, where it is one cheap pass and the error names the real cause.
+    paste candidate_sites.bed <(zcat sample.regions.bed.gz) \
+        | awk '\$1 != \$4 || \$2 != \$5 {
+                print "mosdepth emitted regions in a different order than " \
+                      "candidate_sites.bed at line " NR ", so the BAM header " \
+                      "contig order differs from the target VCF" > "/dev/stderr"
+                exit 1
+            }'
+
+    # Passed on whole rather than filtered here: filterTargetsByDepth needs
+    # every sample's depth at every candidate site, both to apply the
+    # keep-if-any rule and to take the per-site maximum that weights the shards.
+    mv sample.regions.bed.gz ${output_path}
     """
 }
 
@@ -145,12 +188,20 @@ process filterTargetsByDepth {
     path snp_annotation
 
     output:
-    path output_path
+    path output_path, emit: vcf
+    path cost_path, emit: cost
 
     script:
     output_path = "depth_filtered_snp_annotation.vcf.gz"
+    cost_path = "target_site_cost.tsv"
     """
-    cat ${depth_beds} | sort -k1,1 -k2,2n -u > kept_sites.bed
+    set -o pipefail
+
+    # Emits kept_sites.bed and the per-site cost table together, in the target
+    # VCF's own row order. Order is what lets splitCellSNPTargets stream the
+    # cost table alongside the filtered VCF instead of indexing it.
+    aggregate_target_depth.py ${params.min_target_depth} ${params.min_target_sites} \
+        kept_sites.bed ${cost_path} ${depth_beds}
 
     # -T, not -R: -R index-jumps and so requires a .csi/.tbi that
     # sortSNPAnnotation does not produce, while -T streams the whole VCF and
@@ -208,6 +259,8 @@ process runCellSNPGenotype {
         -p ${task.cpus} \
         --minMAF ${filters.minMAF} \
         --minCOUNT ${filters.minCOUNT} \
+        --maxDEPTH ${params.cellsnp_max_depth} \
+        --maxPILEUP ${params.cellsnp_max_pileup} \
         --gzip --genotype
     """
 }
@@ -217,14 +270,14 @@ process splitCellSNPTargets {
     tag "CellSNP-split-targets"
 
     input:
-    tuple path(snp_annotation), val(n_chunks)
+    tuple path(snp_annotation), val(n_chunks), path(site_cost)
 
     output:
     path "part_*.vcf"
 
     script:
     """
-    split_cellsnp_targets.py ${snp_annotation} ${n_chunks} part_
+    split_cellsnp_targets.py ${snp_annotation} ${n_chunks} part_ ${site_cost}
     """
 }
 
@@ -252,6 +305,8 @@ process runCellSNPGenotypeChunk {
         -p ${task.cpus} \
         --minMAF ${filters.minMAF} \
         --minCOUNT ${filters.minCOUNT} \
+        --maxDEPTH ${params.cellsnp_max_depth} \
+        --maxPILEUP ${params.cellsnp_max_pileup} \
         --gzip --genotype
     """
 }

@@ -94,18 +94,33 @@
                     "description": "Number of balanced target-VCF shards to run in parallel when cellsnp_sharded is enabled.",
                     "fa_icon": "fas fa-puzzle-piece"
                 },
-                "filter_targets_by_depth": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Depth pre-filter the cellSNP target list: drop sites with no meaningful pooled read depth in any sample before the expensive per-cell cellSNP pileup runs.",
-                    "fa_icon": "fas fa-filter"
+                "cellsnp_max_depth": {
+                    "type": "integer",
+                    "default": 1000000,
+                    "minimum": 0,
+                    "description": "Post-filter base depth cap passed to cellsnp-lite as --maxDEPTH. This bounds signal (what lands in AD/DP), not memory. It is a pooled budget shared across all barcodes, so size it for per-cell allele counting (X-inactivation escape), not for Vireo's pooled allele fractions. 0 restores cellsnp-lite's unlimited default.",
+                    "fa_icon": "fas fa-compress-arrows-alt"
+                },
+                "cellsnp_max_pileup": {
+                    "type": "integer",
+                    "default": 500000,
+                    "minimum": 0,
+                    "description": "Pileup queue cap passed to cellsnp-lite as --maxPILEUP. This is the flag that bounds peak memory: htslib holds each read in the queue from its start to its end regardless of CIGAR, so queue size tracks span depth (introns included) rather than base depth. 0 restores cellsnp-lite's unlimited default.",
+                    "fa_icon": "fas fa-memory"
                 },
                 "min_target_depth": {
                     "type": "integer",
                     "default": 20,
                     "minimum": 1,
-                    "description": "Minimum pooled read depth for a target site to survive filter_targets_by_depth.",
+                    "description": "Minimum CIGAR-aware read depth, in at least one sample, for a target site to survive the depth pre-filter. Matches the minCOUNT floor in cellsnpDonorFilters.",
                     "fa_icon": "fas fa-layer-group"
+                },
+                "min_target_sites": {
+                    "type": "integer",
+                    "default": 10000,
+                    "minimum": 1,
+                    "description": "Fail the run if the depth pre-filter leaves fewer than this many target sites. A tripwire against silently unreliable demultiplexing, not a quality bar: a genome-wide list should clear it by orders of magnitude. Lower it only when genotyping against a small curated panel.",
+                    "fa_icon": "fas fa-exclamation-triangle"
                 }
             }
         },
