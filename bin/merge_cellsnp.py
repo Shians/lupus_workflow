@@ -9,10 +9,15 @@ therefore a reordering along the SNP (row) axis.
 
 The target VCF is coordinate-sorted before it is sharded (see
 ``sortSNPAnnotation``), and cellsnp-lite emits sites in target-file order, so
-each chunk's output is itself coordinate-sorted: a round-robin subset of a
-sorted list stays sorted. Merging is therefore a k-way merge over already
-sorted streams, which reconstructs the order a single monolithic run would have
-produced while holding only one record per chunk in memory.
+each chunk's output is itself coordinate-sorted: any subset of a sorted list
+that preserves order stays sorted. Merging is therefore a k-way merge over
+already sorted streams, which reconstructs the order a single monolithic run
+would have produced while holding only one record per chunk in memory.
+
+This holds for whatever partition ``split_cellsnp_targets.py`` uses. It splits
+into contiguous ranges, which makes the chunks disjoint and already in order --
+a special case the k-way merge handles without knowing about it. Nothing here
+depends on that, and the ordering assertions below stay meaningful either way.
 
 Both premises are asserted rather than trusted. Every VCF stream is checked to
 be non-decreasing as it is consumed, and every ``.mtx`` is checked to be
