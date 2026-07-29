@@ -220,21 +220,18 @@ workflow {
         // cellSNP genotyping it is trimming.
         //
         // Unconditional. The filter is a deterministic function of the BAMs in
-        // the run, so with a fixed cohort it yields a fixed site list, and the
-        // per-site cost it produces is what lets splitCellSNPTargets balance
-        // shards. To pin an exact site list across reprocessing -- a dedup or
-        // alignment change moves depths, and sites near min_target_depth cross
-        // the line -- feed a previous run's published
-        // depth_filtered_snp_annotation.vcf.gz back in as params.snp_annotation.
+        // the run, so with a fixed cohort it yields a fixed site list. To pin an
+        // exact site list across reprocessing -- a dedup or alignment change
+        // moves depths, and sites near min_target_depth cross the line -- feed a
+        // previous run's published depth_filtered_snp_annotation.vcf.gz back in
+        // as params.snp_annotation.
         depth_beds = genome_bam_indexed
             .combine(sorted_snp_annotation_vcf)
             .map { sample_id, bam, bai, vcf -> tuple(bam, bai, sample_id, vcf) }
             | computeTargetDepth
             | collect
 
-        filtered_targets = filterTargetsByDepth(depth_beds, sorted_snp_annotation_vcf)
-        snp_annotation_path = filtered_targets.vcf
-        target_site_cost = filtered_targets.cost
+        snp_annotation_path = filterTargetsByDepth(depth_beds, sorted_snp_annotation_vcf)
 
         // Prepare per-sample (bam, bai, barcode, sample_id, n_donors) tuples
         // for CellSNP. genome_bam_indexed is (sample_id, bam, bai) in both
@@ -255,9 +252,7 @@ workflow {
             // One tuple per chunk VCF, tagged with its zero-padded index taken
             // from the "part_<idx>.vcf" filename so ordering is deterministic.
             target_chunks = splitCellSNPTargets(
-                    snp_annotation_path
-                        .combine(target_site_cost)
-                        .map { vcf, cost -> tuple(vcf, params.cellsnp_chunks, cost) }
+                    snp_annotation_path.map { vcf -> tuple(vcf, params.cellsnp_chunks) }
                 )
                 .flatMap { chunk_files -> (chunk_files instanceof List) ? chunk_files : [chunk_files] }
                 .map { chunk_vcf ->

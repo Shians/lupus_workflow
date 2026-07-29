@@ -114,14 +114,11 @@ process sortSNPAnnotation {
 // Dropping --fast-mode costs runtime in this process, which is cheap relative
 // to the per-cell cellSNP pass it is protecting.
 //
-// This depth doubles as the shard cost weight (see split_cellsnp_targets.py).
-// Span depth would model htslib's pileup queue more directly, but measuring it
-// means a second mosdepth pass for a number that changes no result -- it only
-// balances shards. Base depth is a fair proxy among the sites that survive the
-// filter, since span and base diverge sharply only under introns and those
-// sites are precisely what the filter now removes. The residual error is a
-// shard running long, and cellsnp_max_pileup already bounds the tail that made
-// balance urgent in the first place.
+// This depth feeds the site filter and nothing else. A previous revision also
+// used it to weight the shard split; that was removed once a full array showed
+// shard runtime is uncorrelated with read depth (+0.04) and tracks site count
+// instead -- see split_cellsnp_targets.py, which now balances on counts and
+// needs no depth input at all.
 process computeTargetDepth {
     label 'medium'
     tag "Target-depth ${sample_id}"
@@ -144,13 +141,11 @@ process computeTargetDepth {
         --by candidate_sites.bed sample ${bam}
 
     # mosdepth groups its output by the BAM header's contig order, which is not
-    # required to match the target VCF's. Everything downstream assumes this
-    # file is in VCF order: aggregate_target_depth.py reads the per-sample
-    # tables row-for-row, and split_cellsnp_targets.py streams the resulting
-    # cost table alongside the filtered VCF. Both of those fail loudly on a
-    # mismatch rather than silently mispairing sites, but they fail late, in a
-    # process that has already done the expensive work. Check the precondition
-    # here, where it is one cheap pass and the error names the real cause.
+    # required to match the target VCF's. aggregate_target_depth.py reads the
+    # per-sample tables row-for-row, so they must agree on row order; it fails
+    # loudly on a mismatch rather than mispairing sites, but it fails late, once
+    # every sample's depth pass has already run. Check the precondition here,
+    # where it is one cheap pass and the error names the real cause.
     paste candidate_sites.bed <(zcat sample.regions.bed.gz) \
         | awk '\$1 != \$4 || \$2 != \$5 {
                 print "mosdepth emitted regions in a different order than " \
@@ -188,20 +183,15 @@ process filterTargetsByDepth {
     path snp_annotation
 
     output:
-    path output_path, emit: vcf
-    path cost_path, emit: cost
+    path output_path
 
     script:
     output_path = "depth_filtered_snp_annotation.vcf.gz"
-    cost_path = "target_site_cost.tsv"
     """
     set -o pipefail
 
-    # Emits kept_sites.bed and the per-site cost table together, in the target
-    # VCF's own row order. Order is what lets splitCellSNPTargets stream the
-    # cost table alongside the filtered VCF instead of indexing it.
     aggregate_target_depth.py ${params.min_target_depth} ${params.min_target_sites} \
-        kept_sites.bed ${cost_path} ${depth_beds}
+        kept_sites.bed ${depth_beds}
 
     # -T, not -R: -R index-jumps and so requires a .csi/.tbi that
     # sortSNPAnnotation does not produce, while -T streams the whole VCF and
@@ -270,14 +260,14 @@ process splitCellSNPTargets {
     tag "CellSNP-split-targets"
 
     input:
-    tuple path(snp_annotation), val(n_chunks), path(site_cost)
+    tuple path(snp_annotation), val(n_chunks)
 
     output:
     path "part_*.vcf"
 
     script:
     """
-    split_cellsnp_targets.py ${snp_annotation} ${n_chunks} part_ ${site_cost}
+    split_cellsnp_targets.py ${snp_annotation} ${n_chunks} part_
     """
 }
 
