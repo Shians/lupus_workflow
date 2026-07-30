@@ -12,6 +12,14 @@ round-robin split gave every shard sites on every chromosome, so every shard
 traversed the whole BAM: measured at ~17.7 TB of reads across 64 shards of a
 276 GB BAM, against 1.0 TB once the split became contiguous.
 
+Contiguity is also relied on downstream: ``merge_cellsnp.py`` reassembles the
+shards by concatenating them in index order and shifting matrix row indices by a
+per-chunk offset, which is only correct because chunk *k* holds coordinates
+strictly below chunk *k+1*. It verifies that rather than trusting it, so a
+non-contiguous split fails the merge loudly instead of writing a mis-ordered
+cellSNP directory -- but it does fail. Do not change the partition here without
+reading that script.
+
 **Balance.** Equal record counts, because runtime tracks the number of sites and
 essentially nothing else. Measured over a full 64-shard array:
 

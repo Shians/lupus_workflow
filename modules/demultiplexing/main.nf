@@ -47,9 +47,10 @@ def cellsnpDonorFilters(n_donors) {
 // cellsnp-lite emits sites in target-file order, so the order of this file is
 // the order of every downstream cellSNP directory. Sorting here means the
 // monolithic and sharded paths are comparable row-for-row rather than only as
-// sets, and it is the precondition for ever merging sharded chunks back into
-// coordinate order: a round-robin chunk of a sorted VCF is itself sorted, so
-// the merge can be an ordered k-way merge instead of a blind concatenation.
+// sets, and it is the precondition for merging sharded chunks back into
+// coordinate order: splitCellSNPTargets cuts this sorted list into contiguous
+// ranges, so the chunks come back disjoint and already ordered and mergeCellSNP
+// can concatenate them rather than reorder them.
 //
 // Sorting only. The VCF is taken as given -- a missing ##fileformat line,
 // absent ##contig headers, or duplicate records are the caller's to fix, and
@@ -224,6 +225,23 @@ def cellsnpBamArg(bam_paths) {
     return names.join(",")
 }
 
+// NOT --genotype. That flag is what makes cellsnp-lite emit
+// cellSNP.cells.vcf.gz, a per-cell GT/AD/DP/PL matrix laid out as one VCF column
+// per barcode. At 41k cells it is pathologically compressible -- 33 MB on disk
+// per shard, 5.5 GB inflated (167x), because nearly every cell carries a
+// `.:.:.:.` placeholder on nearly every row -- and no consumer opens it:
+// vireo's read_cellSNP and snplet::import_cellsnp both read only base.vcf.gz,
+// the AD/DP/OTH matrices and samples.tsv. The `-t GT` on runVireoDemultiplex
+// names the tag of a donor genotype *file* (-d), which is not passed, so it
+// does not make cells.vcf load-bearing either.
+//
+// The AD/DP/OTH counting matrices, which are the actual input to vireo, are
+// emitted regardless of this flag; --genotype only adds the per-cell VCF and
+// the genotype-likelihood work behind it. Dropping it cost ~64 min of merging
+// and shrinks every shard's own output.
+//
+// Restore it only to produce cells.vcf as a donor-genotype reference for a
+// future `vireo -d` run -- merge_cellsnp.py handles its presence or absence.
 process runCellSNPGenotype {
     label 'large'
     publishDir "${params.output_dir}/cell_snp/",
@@ -251,7 +269,7 @@ process runCellSNPGenotype {
         --minCOUNT ${filters.minCOUNT} \
         --maxDEPTH ${params.cellsnp_max_depth} \
         --maxPILEUP ${params.cellsnp_max_pileup} \
-        --gzip --genotype
+        --gzip
     """
 }
 
@@ -297,10 +315,21 @@ process runCellSNPGenotypeChunk {
         --minCOUNT ${filters.minCOUNT} \
         --maxDEPTH ${params.cellsnp_max_depth} \
         --maxPILEUP ${params.cellsnp_max_pileup} \
-        --gzip --genotype
+        --gzip
     """
 }
 
+// Reassemble the sharded genotyping into one cellSNP directory for vireo.
+//
+// The chunks are contiguous ranges of the sorted target VCF, so this is a
+// concatenation with a row offset per chunk, not a k-way merge -- see
+// merge_cellsnp.py, which verifies that contiguity rather than assuming it.
+//
+// The cores are for compression, not for the merge, which is inherently serial.
+// merge_cellsnp.py hands --threads to bgzip (preferred, since it restores the
+// BGZF blocking that cellsnp-lite wrote and plain gzip would discard) or pigz,
+// falling back to single-core zlib when neither is on PATH -- correct either
+// way, only the runtime changes.
 process mergeCellSNP {
     label 'small'
     publishDir "${params.output_dir}/cell_snp/",
@@ -317,7 +346,8 @@ process mergeCellSNP {
     script:
     output_path = "cellsnp_" + suffix
     """
-    merge_cellsnp.py ${output_path} ${contig_order} ${chunk_dirs}
+    merge_cellsnp.py ${output_path} ${contig_order} ${chunk_dirs} \
+        --threads ${task.cpus}
     """
 }
 
