@@ -4,8 +4,9 @@
 Sharding the target SNP VCF and running cellsnp-lite independently per chunk is
 exact: cellsnp-lite's ``--minMAF`` / ``--minCOUNT`` filters are per-SNP and use
 only that SNP's own counts, and every chunk uses the *same* barcode file, so the
-cell columns are identical and identically ordered across chunks. Merging is
-therefore a reordering along the SNP (row) axis.
+cell columns are identical and identically ordered across chunks. Merging
+therefore only has to get the SNP (row) axis right; the cell columns need no
+attention at all.
 
 ``split_cellsnp_targets.py`` emits *contiguous* ranges of the coordinate-sorted
 target VCF: chunk 000 holds the first N records, chunk 001 the next N, and so
@@ -22,32 +23,41 @@ last coordinate is verified to precede the next chunk's first, and every ``.mtx`
 is verified row-major. A tripped check fails loudly.
 
 The invariant that makes the result usable: matrix row *i* must correspond to
-record *i* of ``cellSNP.base.vcf`` and record *i* of ``cellSNP.cells.vcf``.
-vireo's ``read_cellSNP`` pairs matrix rows with VCF records by position only (it
-does not sort), so the same offset is applied to all five files.
+record *i* of ``cellSNP.base.vcf``. vireo's ``read_cellSNP`` pairs matrix rows
+with VCF records by position only (it does not sort), so one row numbering is
+applied to the base VCF and to all three matrices alike -- and to
+``cellSNP.cells.vcf`` too, on the rare runs that have one.
 
-**On compression.** This stage is compression-bound rather than parse-bound, and
-the cost is invisible in a Nextflow trace: ``rchar``/``wchar`` count compressed
-bytes at the syscall boundary, so a file that inflates 167x contributes its
-*compressed* size to the counters and its *uncompressed* size to the runtime.
-Measured on real data (844,477 SNPs x 41,259 cells): decompression runs at
-460 MB/s while Python's ``gzip`` default of level 9 recompresses at 96 MB/s, so
-recompression is ~4x the read cost. Level 6 roughly doubles that to 182 MB/s.
+``cellSNP.cells.vcf`` is *optional* here and normally absent. It exists only
+under ``cellsnp-lite --genotype``, which the pipeline no longer passes because
+no consumer reads the file: vireo's ``read_cellSNP`` and
+``snplet::import_cellsnp`` both open only ``base.vcf``, the matrices and
+``samples.tsv``. When it is present it is copied as raw blocks rather than line
+by line -- its records carry one field per cell, so a line-oriented pass would
+build ~200 kB Python strings per record for no purpose. Row ordering is settled
+by ``cellSNP.base.vcf``, which is small and parsed in full.
 
-``--threads`` is therefore handed to an external compressor when one is on PATH.
-``bgzip`` is preferred over ``pigz``: cellsnp-lite emits BGZF, and recompressing
-with plain gzip silently costs the block structure that makes the file
-indexable. All three paths produce valid gzip, so correctness does not depend on
-which is found.
+**On compression.** In the default configuration this is a minor cost: only
+``cellSNP.base.vcf.gz`` is gzipped, since cellsnp-lite writes the ``.mtx`` files
+as plain text, so the matrix entry loop dominates instead. The numbers below are
+kept because they are why ``--genotype`` was dropped, and because they apply
+again to anyone who restores it.
 
-``cellSNP.cells.vcf`` is *optional* here, and is normally absent -- it exists
-only under ``cellsnp-lite --genotype``, and no consumer reads it (vireo's
-``read_cellSNP`` and ``snplet::import_cellsnp`` both open only ``base.vcf``, the
-matrices and ``samples.tsv``). When it is present it is copied as raw blocks
-rather than line by line: its records carry one field per cell, so a
-line-oriented pass would build ~200 kB Python strings per record for no purpose.
-Row ordering is settled by ``cellSNP.base.vcf``, which is small and parsed in
-full.
+With ``--genotype``, ``cellSNP.cells.vcf.gz`` inflates 167x at 41,259 cells
+(33 MB per shard on disk, 5.5 GB of text), so merging it moved ~420 GB through
+Python's ``gzip`` twice. That cost is invisible in a Nextflow trace:
+``rchar``/``wchar`` count compressed bytes at the syscall boundary, so such a
+file contributes its *compressed* size to the counters and its *uncompressed*
+size to the runtime. Measured on real data (844,477 SNPs x 41,259 cells),
+decompression ran at 460 MB/s against 96 MB/s for the stdlib's default level 9
+-- ~64 min of a 67 min task, on a file nothing opens.
+
+Hence two choices that survive regardless. Level 6 rather than 9 (182 MB/s vs
+96 MB/s on that data, for a few percent of size), and ``--threads`` handed to an
+external compressor when one is on PATH. ``bgzip`` is preferred over ``pigz``:
+cellsnp-lite emits BGZF, and recompressing with plain gzip silently costs the
+block structure that makes the file indexable. All three paths produce valid
+gzip, so correctness does not depend on which is found.
 
 Output filenames match what vireo's ``read_cellSNP`` expects, and the
 compression of each output matches the corresponding per-chunk file (whatever
@@ -240,11 +250,12 @@ def concat_base_vcf(chunk_dirs, contig_ranks, out_dir, level, threads):
     """Concatenate ``cellSNP.base.vcf``, verifying the chunks are in order.
 
     Returns ``(record_counts, out_name)`` where ``record_counts[i]`` is chunk
-    *i*'s record count -- the offsets the matrices are shifted by.
+    *i*'s record count. Their running sum gives the offset each chunk's matrix
+    rows are shifted by.
 
     This is the only file whose records are parsed. It carries no per-cell
-    fields, so the full coordinate check is cheap here and the result covers
-    the other four files, which are row-parallel to it.
+    fields, so the full coordinate check is cheap here, and every other file in
+    the directory is row-parallel to it and inherits the result.
     """
     out_name = basename_of(chunk_dirs[0], BASE_VCF)
     record_counts = []
@@ -501,15 +512,19 @@ def parse_args():
         "--threads",
         type=int,
         default=1,
-        help="threads for pigz, when it is on PATH (default: %(default)s)",
+        help=(
+            "threads for bgzip, or pigz if bgzip is absent; ignored when neither "
+            "is on PATH and the stdlib does the work (default: %(default)s)"
+        ),
     )
     parser.add_argument(
         "--compress-level",
         type=int,
         default=6,
         help=(
-            "gzip level for the outputs. The stdlib default of 9 is 3-4x slower "
-            "here for a few percent of size (default: %(default)s)"
+            "gzip level for the gzipped outputs. The stdlib default of 9 measured "
+            "roughly half the throughput of 6 on real data, for a few percent of "
+            "size (default: %(default)s)"
         ),
     )
     return parser.parse_args()

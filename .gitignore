@@ -1,3 +1,7 @@
 # Claude Code folders
 .claude/
 guides/
+
+# Python bytecode (bin/ scripts are run standalone; this is tooling spillover)
+__pycache__/
+*.pyc

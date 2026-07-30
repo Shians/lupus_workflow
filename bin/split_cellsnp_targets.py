@@ -14,11 +14,12 @@ traversed the whole BAM: measured at ~17.7 TB of reads across 64 shards of a
 
 Contiguity is also relied on downstream: ``merge_cellsnp.py`` reassembles the
 shards by concatenating them in index order and shifting matrix row indices by a
-per-chunk offset, which is only correct because chunk *k* holds coordinates
-strictly below chunk *k+1*. It verifies that rather than trusting it, so a
-non-contiguous split fails the merge loudly instead of writing a mis-ordered
-cellSNP directory -- but it does fail. Do not change the partition here without
-reading that script.
+per-chunk offset, which is only correct because no coordinate in chunk *k*
+exceeds the first coordinate of chunk *k+1*. (Equality is fine, and does happen
+-- a position duplicated in the target list can straddle a boundary.) The merge
+verifies that rather than trusting it, so a non-contiguous split fails loudly
+instead of writing a mis-ordered cellSNP directory -- but it does fail. Do not
+change the partition here without reading that script.
 
 **Balance.** Equal record counts, because runtime tracks the number of sites and
 essentially nothing else. Measured over a full 64-shard array:
