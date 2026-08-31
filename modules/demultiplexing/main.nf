@@ -256,7 +256,7 @@ process runCellSNPGenotype {
     tuple path(output_path), val(suffix)
 
     script:
-    output_path = "cellsnp_" + suffix
+    output_path = suffix
     def bam_arg = cellsnpBamArg(bam_paths)
     def filters = cellsnpDonorFilters(n_donors)
     """
@@ -344,7 +344,7 @@ process mergeCellSNP {
     tuple path(output_path), val(suffix)
 
     script:
-    output_path = "cellsnp_" + suffix
+    output_path = suffix
     """
     merge_cellsnp.py ${output_path} ${contig_order} ${chunk_dirs} \
         --threads ${task.cpus}
@@ -365,9 +365,8 @@ process runVireoDemultiplex {
     path output_path
 
     script:
-    output_path = "vireo_" + suffix
+    output_path = suffix
     """
-    mkdir -p vireo
     vireo \
         -c ${cellsnp_path} \
         -o ${output_path} \

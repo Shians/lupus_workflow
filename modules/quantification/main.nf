@@ -14,7 +14,7 @@ process runOarfish {
     tuple val(sample), path(output_dir)
 
     script:
-    output_dir = "oarfish_output/${sample}"
+    output_dir = "${sample}"
     """
     oarfish \
         -j ${task.cpus} \
