@@ -124,6 +124,20 @@
                 }
             }
         },
+        "quantification_options": {
+            "title": "Quantification Options",
+            "type": "object",
+            "fa_icon": "fas fa-calculator",
+            "properties": {
+                "oarfish_num_bootstraps": {
+                    "type": "integer",
+                    "default": 100,
+                    "minimum": 0,
+                    "description": "Number of Oarfish inferential replicates (bootstrap resamplings) for uncertainty estimation. Written to a P.infreps.pq Parquet table. 0 disables replicate generation.",
+                    "fa_icon": "fas fa-calculator"
+                }
+            }
+        },
         "deduplication_options": {
             "title": "Deduplication Options",
             "type": "object",
@@ -280,6 +294,7 @@
         { "$ref": "#/defs/output_options" },
         { "$ref": "#/defs/alignment_options" },
         { "$ref": "#/defs/genotyping_options" },
+        { "$ref": "#/defs/quantification_options" },
         { "$ref": "#/defs/deduplication_options" },
         { "$ref": "#/defs/barcode_detection_options" },
         { "$ref": "#/defs/publish_options" }

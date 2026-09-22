@@ -21,6 +21,7 @@ process runOarfish {
         --single-cell \
         --model-coverage \
         --filter-group no-filters \
+        --num-bootstraps ${params.oarfish_num_bootstraps} \
         --output ${output_dir}/sample \
         --alignments ${input_bam}
     """
