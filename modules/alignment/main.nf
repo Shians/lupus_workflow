@@ -26,7 +26,7 @@ process alignMinimap2TranscriptomeUnsorted {
     array 100
 
     input:
-    tuple val(sample), path(fastq), path(ref)
+    tuple val(sample), path(fastq), path(ref), val(strand_flag)
 
     output:
     tuple val(sample), path(out_bam)
@@ -35,7 +35,7 @@ process alignMinimap2TranscriptomeUnsorted {
     out_bam = fastq.baseName + ".bam"
 
     """
-    minimap2 -t ${task.cpus} -ax lr:hq -y --eqx -N 100 ${ref} ${fastq} | \
+    minimap2 -t ${task.cpus} -ax lr:hq -y --eqx -N 100 ${strand_flag} ${ref} ${fastq} | \
         samtools view -b | \
         samtools sort > ${out_bam}
     samtools index ${out_bam}

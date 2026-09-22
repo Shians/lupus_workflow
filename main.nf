@@ -123,7 +123,10 @@ workflow {
     }
 
     // Transcript alignment
+    // 3' chemistries yield only reverse-strand molecules after flexiplex, 5' only forward-strand
+    strand_flag = params.chemistry.startsWith('5') ? '--for-only' : '--rev-only'
     transcript_aligned = fastq_chunks.combine(transcriptome_index)
+        .map { sample, fastq, ref -> tuple(sample, fastq, ref, strand_flag) }
         | alignMinimap2TranscriptomeUnsorted
         | groupTuple
         | catTranscriptAlignedBams
