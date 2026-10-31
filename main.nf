@@ -7,20 +7,14 @@ include { bamToFastq; splitFastqChunks } from './modules/preprocessing/main.nf'
 include { flexiplexGetBarcodeCandidates; mergeFlexiplexBarcodes; flexiplexTagFastq } from './modules/barcode_detection/main.nf'
 include { alignMinimap2Spliced; alignMinimap2TranscriptomeUnsorted } from './modules/alignment/main.nf'
 include { catTranscriptAlignedBams; mergeSpliceAlignedBams; sortBamByCellBarcode } from './modules/postprocessing/main.nf'
-include { indexBam } from './modules/deduplication/main.nf'
-include { sortIndexBam } from './modules/deduplication/main.nf'
 include { nailpolishDedup } from './modules/deduplication/main.nf'
-include { umitoolsDedup as umitoolsDedupGenome } from './modules/deduplication/main.nf'
-include { umitoolsDedup as umitoolsDedupTranscriptome } from './modules/deduplication/main.nf'
 include { sortSNPAnnotation; computeTargetDepth; filterTargetsByDepth; runCellSNPGenotype; splitCellSNPTargets; runCellSNPGenotypeChunk; mergeCellSNP; runVireoDemultiplex } from './modules/demultiplexing/main.nf'
 include { runOarfish } from './modules/quantification/main.nf'
 include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; aggregateReadTracking; countFastqReads; multiQC } from './modules/qc/main.nf'
 include { countReads as countRawReads } from './modules/qc/main.nf'
 include { countReads as countBarcodeTaggedReads } from './modules/qc/main.nf'
 include { countReads as countGenomeAlignedReads } from './modules/qc/main.nf'
-include { countReads as countGenomeDedupReads } from './modules/qc/main.nf'
 include { countReads as countTranscriptAlignedReads } from './modules/qc/main.nf'
-include { countReads as countTranscriptDedupReads } from './modules/qc/main.nf'
 
 workflow {
     // Validate parameters against schema and print summary
@@ -64,26 +58,18 @@ workflow {
         | flexiplexTagFastq
 
     // Counted on the tagged FASTQ rather than downstream of alignment so that
-    // barcode-assignment loss is isolated from whatever the dedup step does. In
-    // nailpolish mode the next count sits on the far side of a tool that both
-    // drops unmatched reads and collapses molecules; without this row those two
-    // are indistinguishable.
+    // barcode-assignment loss is isolated from whatever the dedup step does. The
+    // next count sits on the far side of nailpolish, which both drops unmatched
+    // reads and collapses molecules; without this row those two are
+    // indistinguishable.
     tagged_fastq_counts_ch = countFastqReads(
         tagged_fastq_files.fastq.map { sample_id, fastq -> tuple(sample_id, fastq, 'after_barcode_tagging') }
     )
 
-    // Deduplication strategy (see params.dedup_method):
-    //   'nailpolish' - molecular (CB+UMI) consensus dedup at the FASTQ level, before
-    //                  alignment. Each molecule aligns once, preserving the full
-    //                  multimapping set for oarfish, and serves both the genome
-    //                  (CellSNP) and transcriptome (oarfish) paths from one step.
-    //   'umitools'   - legacy post-alignment position-based dedup, run separately on
-    //                  the genome and transcriptome BAMs (kept for validation).
-    if (params.dedup_method == 'nailpolish') {
-        reads_for_alignment = nailpolishDedup(tagged_fastq_files.fastq).fastq
-    } else {
-        reads_for_alignment = tagged_fastq_files.fastq
-    }
+    // Molecular (CB+UMI) consensus dedup at the FASTQ level, before alignment. Each
+    // molecule aligns once, preserving the full multimapping set for oarfish, and
+    // serves both the genome (CellSNP) and transcriptome (oarfish) paths from one step.
+    reads_for_alignment = nailpolishDedup(tagged_fastq_files.fastq).fastq
 
     // Split FASTQ into chunks for parallel alignment
     fastq_chunks = reads_for_alignment
@@ -100,27 +86,15 @@ workflow {
     // QC: genome alignment stats and read count
     flagstat_out = samtoolsFlagstat(merged_spliced_bams)
     mosdepth_out = mosdepthCoverage(merged_spliced_bams)
-    // In nailpolish mode the aligned BAM is already deduplicated (dedup happened on the
-    // FASTQ), so this first count reflects deduplicated molecules; in umitools mode it
-    // reflects reads that entered alignment, before the post-alignment dedup below.
-    // The umitools label carries an _aligned suffix to distinguish it from the FASTQ-level
-    // after_barcode_tagging count above -- the two measure the same reads at different
-    // points, so a divergence between them means alignment dropped records.
-    aligned_stage = params.dedup_method == 'nailpolish' ? 'after_dedup_aligned' : 'after_barcode_tagging_aligned'
-    tagged_counts_ch = countBarcodeTaggedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, aligned_stage, 'PRIMARY') })
+    // The aligned BAM is already deduplicated (dedup happened on the FASTQ), so this
+    // first count reflects deduplicated molecules.
+    tagged_counts_ch = countBarcodeTaggedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_dedup_aligned', 'PRIMARY') })
     genome_counts_ch = countGenomeAlignedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_genome_alignment', 'PRIMARY_MAPPED') })
 
-    // Genome dedup + indexed BAM for CellSNP.
-    if (params.dedup_method == 'nailpolish') {
-        // Reads were already deduplicated at the FASTQ level; the merged spliced BAM is
-        // already coordinate-sorted and indexed by mergeSpliceAlignedBams.
-        genome_bam_indexed = merged_spliced_bams
-        dedup_genome_counts_ch = channel.empty()
-    } else {
-        dedup_bam_genome = umitoolsDedupGenome(merged_spliced_bams)
-        dedup_genome_counts_ch = countGenomeDedupReads(dedup_bam_genome.bam.map { sample_id, bam -> tuple(sample_id, bam, 'after_genome_dedup', 'PRIMARY_MAPPED') })
-        genome_bam_indexed = indexBam(dedup_bam_genome.bam).bam_bai
-    }
+    // Reads were already deduplicated at the FASTQ level, and the merged spliced BAM is
+    // already coordinate-sorted and indexed by mergeSpliceAlignedBams, so it feeds CellSNP
+    // directly.
+    genome_bam_indexed = merged_spliced_bams
 
     // Transcript alignment
     // 3' chemistries yield only reverse-strand molecules after flexiplex, 5' only forward-strand
@@ -137,23 +111,8 @@ workflow {
         transcript_aligned.map { sample_id, bam -> tuple(sample_id, bam, 'after_transcriptome_alignment', 'PRIMARY_MAPPED') }
     )
 
-    // Transcript dedup: nailpolish already deduplicated pre-alignment, so feed the
-    // concatenated BAM straight through; umitools dedups the sorted transcriptome BAM.
-    if (params.dedup_method == 'nailpolish') {
-        transcript_bam = transcript_aligned
-        // transcript_bam is transcript_aligned here, so a second count would just
-        // repeat the row above.
-        dedup_transcript_counts_ch = channel.empty()
-    } else {
-        sorted_indexed_transcript = sortIndexBam(transcript_aligned)
-        transcript_bam = umitoolsDedupTranscriptome(sorted_indexed_transcript).bam
-        dedup_transcript_counts_ch = countTranscriptDedupReads(
-            transcript_bam.map { sample_id, bam -> tuple(sample_id, bam, 'after_transcriptome_dedup', 'PRIMARY_MAPPED') }
-        )
-    }
-
     // oarfish requires the BAM collated by cell barcode
-    transcript_bam
+    transcript_aligned
         | sortBamByCellBarcode
         | runOarfish
 
@@ -162,23 +121,16 @@ workflow {
         .mix(tagged_fastq_counts_ch)
         .mix(tagged_counts_ch)
         .mix(genome_counts_ch)
-        .mix(dedup_genome_counts_ch)
         .mix(transcript_counts_ch)
-        .mix(dedup_transcript_counts_ch)
         .groupTuple()
     read_tracking_ch = readCountSummary(all_counts_ch)
 
     // Canonical stage order for the cross-sample summary, tagged with the branch
     // each stage sits on: 'common' is the shared trunk, and the genome and
-    // transcriptome arms fork off the last common stage. Which stages exist
-    // depends on the dedup method, so the list is built here rather than in the
-    // process.
-    stage_order = params.dedup_method == 'nailpolish'
-        ? 'input_bam:common,after_barcode_tagging:common,after_dedup_aligned:common,' +
-          'after_genome_alignment:genome,after_transcriptome_alignment:transcriptome'
-        : 'input_bam:common,after_barcode_tagging:common,' +
-          'after_barcode_tagging_aligned:genome,after_genome_alignment:genome,after_genome_dedup:genome,' +
-          'after_transcriptome_alignment:transcriptome,after_transcriptome_dedup:transcriptome'
+    // transcriptome arms fork off the last common stage. The list is built here
+    // because the stages are defined by this workflow, not by the process.
+    stage_order = 'input_bam:common,after_barcode_tagging:common,after_dedup_aligned:common,' +
+        'after_genome_alignment:genome,after_transcriptome_alignment:transcriptome'
 
     read_tracking_summary = read_tracking_ch
         .collect()
@@ -237,8 +189,7 @@ workflow {
         snp_annotation_path = filterTargetsByDepth(depth_beds, sorted_snp_annotation_vcf)
 
         // Prepare per-sample (bam, bai, barcode, sample_id, n_donors) tuples
-        // for CellSNP. genome_bam_indexed is (sample_id, bam, bai) in both
-        // dedup modes.
+        // for CellSNP. genome_bam_indexed is (sample_id, bam, bai).
         cellsnp_bam_bc = genome_bam_indexed
             .join(flexiplex_bc)
             .map { sample_id, bam, bai, barcode_file ->

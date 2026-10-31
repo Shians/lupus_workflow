@@ -138,20 +138,6 @@
                 }
             }
         },
-        "deduplication_options": {
-            "title": "Deduplication Options",
-            "type": "object",
-            "fa_icon": "fas fa-clone",
-            "properties": {
-                "dedup_method": {
-                    "type": "string",
-                    "default": "nailpolish",
-                    "description": "Deduplication method: 'nailpolish' performs molecular (CB+UMI) consensus dedup at the FASTQ level before alignment; 'umitools' runs legacy post-alignment position-based dedup on the genome and transcriptome BAMs.",
-                    "fa_icon": "fas fa-clone",
-                    "enum": ["nailpolish", "umitools"]
-                }
-            }
-        },
         "barcode_detection_options": {
             "title": "Barcode Detection Options",
             "type": "object",
@@ -214,16 +200,10 @@
                     "description": "Save splice-aligned BAM files.",
                     "fa_icon": "fas fa-save"
                 },
-                "publish_bam_dedup": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Save UMI-deduplicated BAM files (umitools mode).",
-                    "fa_icon": "fas fa-save"
-                },
                 "publish_dedup_fastq": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Save nailpolish-deduplicated FASTQ files (nailpolish mode).",
+                    "description": "Save nailpolish-deduplicated FASTQ files.",
                     "fa_icon": "fas fa-save"
                 },
                 "publish_oarfish": {
@@ -265,7 +245,7 @@
                 "publish_qc_dedup_logs": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Save UMI-tools deduplication log files.",
+                    "description": "Save nailpolish deduplication summary HTML files.",
                     "fa_icon": "fas fa-save"
                 },
                 "publish_qc_knee_plots": {
@@ -295,7 +275,6 @@
         { "$ref": "#/defs/alignment_options" },
         { "$ref": "#/defs/genotyping_options" },
         { "$ref": "#/defs/quantification_options" },
-        { "$ref": "#/defs/deduplication_options" },
         { "$ref": "#/defs/barcode_detection_options" },
         { "$ref": "#/defs/publish_options" }
     ]

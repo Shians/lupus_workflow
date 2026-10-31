@@ -140,10 +140,10 @@ process aggregateReadTracking {
 
     script:
     // stage_order is a comma-separated "stage:branch" list built in the entry
-    // workflow, since which stages exist depends on params.dedup_method. It
-    // fixes row order (the per-sample files arrive in nondeterministic task
-    // completion order) and tells the fraction maths which stages sit on the
-    // shared trunk vs. on the genome/transcriptome forks.
+    // workflow, where the stages are defined. It fixes row order (the
+    // per-sample files arrive in nondeterministic task completion order) and
+    // tells the fraction maths which stages sit on the shared trunk vs. on the
+    // genome/transcriptome forks.
     combined_tsv = "read_tracking_all_samples.tsv"
     multiqc_tsv  = "read_tracking_mqc.tsv"
     """
