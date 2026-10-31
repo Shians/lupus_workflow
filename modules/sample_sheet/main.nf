@@ -6,6 +6,7 @@ def parseVireoSampleSheet(vireoSheetPath) {
     def vireoSheet = [:]
     def lineNumber = 0
     def errors = []
+    def warnings = []
 
     file(vireoSheetPath).withReader { reader ->
         def header = null
@@ -55,7 +56,7 @@ def parseVireoSampleSheet(vireoSheetPath) {
                     if (nDonors <= 0) {
                         errors << "ERROR: Line ${lineNumber}: n_donors must be positive, got: ${nDonors}"
                     } else if (nDonors > 20) {
-                        errors << "WARNING: Line ${lineNumber}: n_donors is very high (${nDonors}), this may cause performance issues"
+                        warnings << "Line ${lineNumber}: n_donors is very high (${nDonors}), this may cause performance issues"
                     }
                     vireoSheet[row.sample_id] = nDonors
                 } catch (NumberFormatException _e) {
@@ -64,6 +65,8 @@ def parseVireoSampleSheet(vireoSheetPath) {
             }
         }
     }
+
+    warnings.each { w -> log.warn w }
 
     if (errors.size() > 0) {
         def msg = "Vireo sample sheet validation failed with ${errors.size()} error(s):\n" +
