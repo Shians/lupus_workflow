@@ -359,7 +359,9 @@ process runVireoDemultiplex {
     tag "Vireo-demultiplex ${suffix}"
 
     input:
-    tuple path(cellsnp_path), val(suffix), val(n_donors)
+    // Staged under a fixed name: the upstream cellSNP directory is also named
+    // ${suffix}, which would make vireo write into the cached upstream output.
+    tuple path(cellsnp_path, stageAs: 'cellsnp_input'), val(suffix), val(n_donors)
 
     output:
     path output_path
