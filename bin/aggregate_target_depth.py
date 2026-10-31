@@ -34,6 +34,7 @@ Usage:
 
 import gzip
 import sys
+from itertools import zip_longest
 
 
 def open_maybe_gz(path, mode="rt"):
@@ -72,7 +73,20 @@ def main():
     site_count = 0
 
     with open(kept_path, "wt") as kept:
-        for line_number, rows in enumerate(zip(*handles), start=1):
+        # zip() would stop at the shortest input, silently shortening the
+        # output, and drop the row it had already read from earlier handles.
+        # zip_longest pads ended inputs with None, so a mismatch in any
+        # position fails here instead.
+        for line_number, rows in enumerate(zip_longest(*handles), start=1):
+            if None in rows:
+                short_paths = [
+                    path for path, line in zip(depth_paths, rows) if line is None
+                ]
+                sys.exit(
+                    f"{', '.join(short_paths)} ended after {line_number - 1} "
+                    f"rows but other inputs continue; per-sample depth tables "
+                    f"must cover the identical site list"
+                )
             site_count += 1
             chrom = start = end = None
             keep = False
@@ -95,16 +109,6 @@ def main():
             if keep:
                 kept_count += 1
                 kept.write(f"{chrom}\t{start}\t{end}\n")
-
-        # zip() stops at the shortest input, so a truncated file would silently
-        # shorten the output rather than fail. Catch that explicitly.
-        for path, handle in zip(depth_paths, handles):
-            if handle.readline():
-                sys.exit(
-                    f"{path} has more rows than the shortest input, which "
-                    f"stopped at line {site_count}; per-sample depth tables "
-                    f"must cover the identical site list"
-                )
 
     for handle in handles:
         handle.close()
