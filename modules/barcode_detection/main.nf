@@ -31,7 +31,10 @@ process flexiplexGetBarcodeCandidates {
     tuple val(sample_id), path(output_barcodes)
 
     script:
-    output_barcodes = "${sample_id}_barcodes_counts.txt"
+    // One task per input BAM, so the prefix carries the FASTQ name to keep
+    // per-BAM count files from colliding in the publish dir.
+    def output_prefix = "${sample_id}_${fastq_file.simpleName}"
+    output_barcodes = "${output_prefix}_barcodes_counts.txt"
 
     def chemistryPatterns = getChemistryPatterns(params.chemistry)
 
@@ -44,7 +47,7 @@ process flexiplexGetBarcodeCandidates {
             -u "${chemistryPatterns.umi}" \\
             -x "${chemistryPatterns.suffix}" \\
             -f 0 \\
-            -n ${sample_id}
+            -n ${output_prefix}
     """
 }
 
@@ -128,7 +131,7 @@ process flexiplexTagFastq {
     label 'large'
     publishDir "${params.output_dir}/flexiplex_barcoded_fastq/",
         mode: 'copy',
-        pattern: '*.fastq.gz|*.txt.gz',
+        pattern: '*.{fastq.gz,txt.gz}',
         enabled: params.publish_retagged_fastq
     publishDir "${params.output_dir}/logs/flexiplex",
         mode: 'copy',
@@ -145,9 +148,10 @@ process flexiplexTagFastq {
     path(output_log),                                  emit: log
 
     script:
-    output_fastq = "${sample_id}_${fastq_file.simpleName}_tagged.fastq.gz"
-    output_reads_barcodes = "${sample_id}_reads_barcodes.txt.gz"
-    output_log = "${sample_id}_${fastq_file.simpleName}_flexiplex.log"
+    def output_prefix = "${sample_id}_${fastq_file.simpleName}"
+    output_fastq = "${output_prefix}_tagged.fastq.gz"
+    output_reads_barcodes = "${output_prefix}_reads_barcodes.txt.gz"
+    output_log = "${output_prefix}_flexiplex.log"
 
     def chemistryPatterns = getChemistryPatterns(params.chemistry)
 
@@ -161,10 +165,10 @@ process flexiplexTagFastq {
             -x "${chemistryPatterns.suffix}" \\
             -f 2 \\
             -e 1 \\
-            -n ${sample_id} \\
+            -n ${output_prefix} \\
             -k ${barcode_file} \\
         | pigz > ${output_fastq}
-    pigz ${sample_id}_reads_barcodes.txt
+    pigz ${output_prefix}_reads_barcodes.txt
     grep -vE '^INFO:|^WARNING:|million reads processed|cite us' .command.log > ${output_log}
     """
 }
