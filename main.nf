@@ -12,7 +12,7 @@ include { sortSNPAnnotation; computeTargetDepth; filterTargetsByDepth; runCellSN
 include { runOarfish } from './modules/quantification/main.nf'
 include { craminoStats; samtoolsFlagstat; mosdepthCoverage; readCountSummary; aggregateReadTracking; countFastqReads; multiQC } from './modules/qc/main.nf'
 include { countReads as countRawReads } from './modules/qc/main.nf'
-include { countReads as countBarcodeTaggedReads } from './modules/qc/main.nf'
+include { countReads as countDedupAlignedReads } from './modules/qc/main.nf'
 include { countReads as countGenomeAlignedReads } from './modules/qc/main.nf'
 include { countReads as countTranscriptAlignedReads } from './modules/qc/main.nf'
 
@@ -88,7 +88,7 @@ workflow {
     mosdepth_out = mosdepthCoverage(merged_spliced_bams)
     // The aligned BAM is already deduplicated (dedup happened on the FASTQ), so this
     // first count reflects deduplicated molecules.
-    tagged_counts_ch = countBarcodeTaggedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_dedup_aligned', 'PRIMARY') })
+    dedup_aligned_counts_ch = countDedupAlignedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_dedup_aligned', 'PRIMARY') })
     genome_counts_ch = countGenomeAlignedReads(merged_spliced_bams.map { sample_id, bam, _bai -> tuple(sample_id, bam, 'after_genome_alignment', 'PRIMARY_MAPPED') })
 
     // Reads were already deduplicated at the FASTQ level, and the merged spliced BAM is
@@ -119,7 +119,7 @@ workflow {
     // Read tracking summary
     all_counts_ch = raw_counts_ch
         .mix(tagged_fastq_counts_ch)
-        .mix(tagged_counts_ch)
+        .mix(dedup_aligned_counts_ch)
         .mix(genome_counts_ch)
         .mix(transcript_counts_ch)
         .groupTuple()
