@@ -458,9 +458,14 @@ def concat_mtx(chunk_dirs, candidates, out_dir, record_counts, level, threads):
 
                     # Only the row index is rewritten; the column and value are
                     # passed through as the bytes they arrived as.
-                    field_end = line.find(b" ")
-                    if field_end < 0:
+                    # Fields may be separated by spaces or tabs; cellsnp-lite
+                    # writes tabs.
+                    separators = [
+                        i for i in (line.find(b" "), line.find(b"\t")) if i >= 0
+                    ]
+                    if not separators:
                         sys.exit(f"{path}: malformed .mtx entry: {line[:80]!r}")
+                    field_end = min(separators)
                     row = int(line[:field_end])
 
                     if row < previous_row:
