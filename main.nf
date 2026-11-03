@@ -233,11 +233,31 @@ workflow {
 
         // Conditionally run Vireo demultiplexing
         if (params.vireo_sample_sheet) {
-            cellsnp_results
+            vireo_input = cellsnp_results
                 .map { cellsnp_path, sample_id ->
+                    // With a sheet supplied, a missing sample is more likely a
+                    // typo or a late addition than a deliberate two-donor pool,
+                    // and the fallback otherwise runs without a trace.
+                    if (!vireo_donors.containsKey(sample_id)) {
+                        log.warn "Sample ${sample_id} is not in the Vireo sample sheet; " +
+                            "demultiplexing it as ${default_n_donors} donors"
+                    }
                     tuple(cellsnp_path, sample_id, vireo_donors[sample_id] ?: default_n_donors)
                 }
-                | runVireoDemultiplex
+                // A single-donor library has nothing to demultiplex, and vireo
+                // cannot run on one: with N=1 its doublet search indexes an
+                // empty donor-pair array, and --noDoublet only moves the crash
+                // to write_donor_id, which reduces over the same empty axis.
+                // Skip it here rather than inside the process. The cellSNP
+                // output for these samples is still produced and published.
+                .filter { _cellsnp_path, sample_id, n_donors ->
+                    if (n_donors == 1) {
+                        log.info "Skipping Vireo for ${sample_id}: single donor, nothing to demultiplex"
+                    }
+                    n_donors > 1
+                }
+
+            runVireoDemultiplex(vireo_input)
         }
     }
 }
